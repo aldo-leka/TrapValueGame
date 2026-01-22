@@ -28,22 +28,41 @@
                 Reveal="GameState.CurrentReveal"
                 TotalPlayed="GameState.TotalPlayed"
                 CorrectGuesses="GameState.CorrectGuesses"
-                OnPlayAgain="HandlePlayAgain" />
+                TotalHistoricalPlays="GameState.TotalHistoricalPlays"
+                OnPlayAgain="HandlePlayAgain"
+                OnResetHistory="HandleResetHistory" />
             break;
 
         case Services.GameState.Error:
             <ErrorState
                 Message="@GameState.ErrorMessage"
-                OnRetry="HandleRetry" />
+                OnRetry="HandleRetry"
+                OnResetHistory="HandleResetHistory"
+                ShowResetOption="@(GameState.TotalHistoricalPlays > 0)" />
             break;
     }
 </MudContainer>
 
 @code {
-    protected override async Task OnInitializedAsync()
+    private bool _initialized;
+
+    protected override void OnInitialized()
     {
         GameState.OnStateChanged += StateHasChanged;
-        await GameState.LoadNextSnapshotAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_initialized)
+        {
+            _initialized = true;
+
+            // Initialize with localStorage data (JS interop now available)
+            await GameState.InitializeAsync();
+
+            // Now load the first snapshot
+            await GameState.LoadNextSnapshotAsync();
+        }
     }
 
     private async Task HandleDecision(string choice)
@@ -58,6 +77,12 @@
 
     private async Task HandleRetry()
     {
+        await GameState.LoadNextSnapshotAsync();
+    }
+
+    private async Task HandleResetHistory()
+    {
+        await GameState.ResetHistoryAsync();
         await GameState.LoadNextSnapshotAsync();
     }
 

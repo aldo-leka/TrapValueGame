@@ -21,6 +21,7 @@ builder.Services.AddHttpClient("PythonApi", client =>
 
 // Add game services
 builder.Services.AddScoped<GameService>();
+builder.Services.AddScoped<LocalStorageService>();
 builder.Services.AddScoped<GameStateService>();
 
 var app = builder.Build();

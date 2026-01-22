@@ -14,6 +14,7 @@ public enum GameState
 public class GameStateService
 {
     private readonly GameService _gameService;
+    private readonly LocalStorageService _localStorageService;
     private readonly ILogger<GameStateService> _logger;
 
     public GameState CurrentState { get; private set; } = GameState.Loading;
@@ -22,23 +23,60 @@ public class GameStateService
     public string? PlayerChoice { get; private set; }
     public string? ErrorMessage { get; private set; }
 
-    // Track played snapshots to avoid repeats in a session
-    private readonly List<int> _playedSnapshotIds = [];
+    // Track played snapshots - now backed by localStorage
+    private List<int> _playedSnapshotIds = [];
 
-    // Session stats
+    // Session stats (not persisted - resets on refresh)
     public int TotalPlayed { get; private set; }
     public int CorrectGuesses { get; private set; }
 
+    // Total historical plays (from localStorage)
+    public int TotalHistoricalPlays => _playedSnapshotIds.Count;
+
+    public bool IsInitialized { get; private set; }
+
     public event Action? OnStateChanged;
 
-    public GameStateService(GameService gameService, ILogger<GameStateService> logger)
+    public GameStateService(
+        GameService gameService,
+        LocalStorageService localStorageService,
+        ILogger<GameStateService> logger)
     {
         _gameService = gameService;
+        _localStorageService = localStorageService;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Initialize the service with persisted data from localStorage.
+    /// Must be called from OnAfterRenderAsync(firstRender: true).
+    /// </summary>
+    public async Task InitializeAsync()
+    {
+        if (IsInitialized) return;
+
+        // Initialize localStorage service first
+        await _localStorageService.InitializeAsync();
+
+        // Load persisted IDs
+        var persistedIds = _localStorageService.GetPlayedSnapshotIds();
+        _playedSnapshotIds = persistedIds.ToList();
+
+        IsInitialized = true;
+
+        _logger.LogInformation("GameStateService initialized with {Count} persisted snapshot IDs",
+            _playedSnapshotIds.Count);
     }
 
     public async Task LoadNextSnapshotAsync()
     {
+        // Ensure initialized before loading
+        if (!IsInitialized)
+        {
+            _logger.LogWarning("LoadNextSnapshotAsync called before initialization");
+            return;
+        }
+
         try
         {
             CurrentState = GameState.Loading;
@@ -51,7 +89,9 @@ public class GameStateService
             if (snapshot == null)
             {
                 CurrentState = GameState.Error;
-                ErrorMessage = "No snapshots available. Please seed the database first.";
+                ErrorMessage = _playedSnapshotIds.Count > 0
+                    ? "You've played all available snapshots! Reset your history to play again."
+                    : "No snapshots available. Please seed the database first.";
                 NotifyStateChanged();
                 return;
             }
@@ -106,7 +146,10 @@ public class GameStateService
             }
 
             CurrentReveal = reveal;
+
+            // Add to local list and persist to localStorage
             _playedSnapshotIds.Add(CurrentSnapshot.SnapshotId);
+            await _localStorageService.SavePlayedSnapshotIdAsync(CurrentSnapshot.SnapshotId);
 
             // Update session stats
             TotalPlayed++;
@@ -134,9 +177,11 @@ public class GameStateService
         await LoadNextSnapshotAsync();
     }
 
+    /// <summary>
+    /// Reset session stats only (keeps history).
+    /// </summary>
     public void ResetSession()
     {
-        _playedSnapshotIds.Clear();
         TotalPlayed = 0;
         CorrectGuesses = 0;
         CurrentSnapshot = null;
@@ -144,6 +189,18 @@ public class GameStateService
         PlayerChoice = null;
         CurrentState = GameState.Loading;
         NotifyStateChanged();
+    }
+
+    /// <summary>
+    /// Clear all played history from localStorage.
+    /// </summary>
+    public async Task ResetHistoryAsync()
+    {
+        await _localStorageService.ClearPlayedSnapshotIdsAsync();
+        _playedSnapshotIds.Clear();
+        ResetSession();
+
+        _logger.LogInformation("History cleared - all snapshots available again");
     }
 
     public double GetAccuracy()

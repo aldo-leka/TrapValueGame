@@ -13,14 +13,33 @@
         @(Message ?? "An unexpected error occurred. Please try again.")
     </MudText>
 
-    <MudButton
-        Variant="Variant.Filled"
-        Color="Color.Primary"
-        StartIcon="@Icons.Material.Filled.Refresh"
-        OnClick="@(() => OnRetry.InvokeAsync())"
-        Class="mt-6">
-        Try Again
-    </MudButton>
+    <MudStack Row="true" Spacing="3" Class="mt-6">
+        <MudButton
+            Variant="Variant.Filled"
+            Color="Color.Primary"
+            StartIcon="@Icons.Material.Filled.Refresh"
+            OnClick="@(() => OnRetry.InvokeAsync())">
+            Try Again
+        </MudButton>
+
+        @if (ShowResetOption)
+        {
+            <MudButton
+                Variant="Variant.Outlined"
+                Color="Color.Warning"
+                StartIcon="@Icons.Material.Filled.RestartAlt"
+                OnClick="@(() => OnResetHistory.InvokeAsync())">
+                Reset History
+            </MudButton>
+        }
+    </MudStack>
+
+    @if (ShowResetOption)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+            Reset will clear your played history and let you see all snapshots again.
+        </MudText>
+    }
 </MudStack>
 
 @code {
@@ -29,6 +48,12 @@
 
     [Parameter]
     public EventCallback OnRetry { get; set; }
+
+    [Parameter]
+    public EventCallback OnResetHistory { get; set; }
+
+    [Parameter]
+    public bool ShowResetOption { get; set; }
 }
 
 <style>

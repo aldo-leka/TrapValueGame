@@ -93,7 +93,7 @@
         <MudStack Row="true" Justify="Justify.SpaceAround">
             <MudStack AlignItems="AlignItems.Center">
                 <MudText Typo="Typo.h4">@TotalPlayed</MudText>
-                <MudText Typo="Typo.caption" Color="Color.Secondary">Played</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">This Session</MudText>
             </MudStack>
             <MudStack AlignItems="AlignItems.Center">
                 <MudText Typo="Typo.h4" Color="Color.Success">@CorrectGuesses</MudText>
@@ -104,6 +104,24 @@
                 <MudText Typo="Typo.caption" Color="Color.Secondary">Accuracy</MudText>
             </MudStack>
         </MudStack>
+
+        @if (TotalHistoricalPlays > 0)
+        {
+            <MudDivider Class="my-3" />
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Total unique snapshots played: @TotalHistoricalPlays
+                </MudText>
+                <MudButton
+                    Variant="Variant.Text"
+                    Color="Color.Secondary"
+                    Size="Size.Small"
+                    StartIcon="@Icons.Material.Filled.RestartAlt"
+                    OnClick="@(() => OnResetHistory.InvokeAsync())">
+                    Reset
+                </MudButton>
+            </MudStack>
+        }
     </MudPaper>
 
     @* Play Again *@
@@ -130,7 +148,13 @@
     public int CorrectGuesses { get; set; }
 
     [Parameter]
+    public int TotalHistoricalPlays { get; set; }
+
+    [Parameter]
     public EventCallback OnPlayAgain { get; set; }
+
+    [Parameter]
+    public EventCallback OnResetHistory { get; set; }
 
     private string FormatPrice(decimal? value)
     {
