@@ -1,0 +1,38 @@
+@namespace TrapValueGame.Components.Game
+
+<MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="min-vh-50 py-16">
+    <MudIcon Icon="@Icons.Material.Filled.ErrorOutline"
+             Color="Color.Error"
+             Size="Size.Large" />
+
+    <MudText Typo="Typo.h5" Class="mt-4">
+        Something went wrong
+    </MudText>
+
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Align="Align.Center" Class="mt-2" Style="max-width: 400px;">
+        @(Message ?? "An unexpected error occurred. Please try again.")
+    </MudText>
+
+    <MudButton
+        Variant="Variant.Filled"
+        Color="Color.Primary"
+        StartIcon="@Icons.Material.Filled.Refresh"
+        OnClick="@(() => OnRetry.InvokeAsync())"
+        Class="mt-6">
+        Try Again
+    </MudButton>
+</MudStack>
+
+@code {
+    [Parameter]
+    public string? Message { get; set; }
+
+    [Parameter]
+    public EventCallback OnRetry { get; set; }
+}
+
+<style>
+    .min-vh-50 {
+        min-height: 50vh;
+    }
+</style>

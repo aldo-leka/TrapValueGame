@@ -1,0 +1,164 @@
+@namespace TrapValueGame.Components.Game
+
+<MudPaper Class="pa-4 company-card" Elevation="0">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+            @* Sector Icon *@
+            <MudAvatar Size="Size.Large" Class="@($"sector-avatar {GetSectorClass()}")">
+                <span class="sector-icon">@GetSectorIcon()</span>
+            </MudAvatar>
+
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.h4" Class="company-name">@FakeName</MudText>
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Class="sector-chip">
+                        @Sector
+                    </MudChip>
+                    @if (!string.IsNullOrEmpty(Industry))
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@Industry</MudText>
+                    }
+                </MudStack>
+            </MudStack>
+        </MudStack>
+
+        <MudStack AlignItems="AlignItems.End" Class="snapshot-info">
+            <MudText Typo="Typo.h6" Color="Color.Primary">
+                @SnapshotDate.ToString("MMM yyyy")
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Snapshot Date
+            </MudText>
+            @if (YearsOfData > 0)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                    @YearsOfData years of data
+                </MudText>
+            }
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public string FakeName { get; set; } = "Unknown Company";
+
+    [Parameter]
+    public string Sector { get; set; } = "Unknown";
+
+    [Parameter]
+    public string? Industry { get; set; }
+
+    [Parameter]
+    public DateTime SnapshotDate { get; set; }
+
+    [Parameter]
+    public int YearsOfData { get; set; }
+
+    private string GetSectorIcon()
+    {
+        return Sector?.ToLowerInvariant() switch
+        {
+            "technology" or "information technology" => "💻",
+            "healthcare" or "health care" => "🏥",
+            "consumer discretionary" => "🏪",
+            "financials" => "🏦",
+            "energy" => "⚡",
+            "industrials" => "🏭",
+            "materials" => "⛏️",
+            "utilities" => "💡",
+            "real estate" => "🏠",
+            "communication services" => "📡",
+            "consumer staples" => "🛒",
+            _ => "📊"
+        };
+    }
+
+    private string GetSectorClass()
+    {
+        return Sector?.ToLowerInvariant() switch
+        {
+            "technology" or "information technology" => "tech",
+            "healthcare" or "health care" => "healthcare",
+            "consumer discretionary" => "consumer",
+            "financials" => "financials",
+            "energy" => "energy",
+            "industrials" => "industrials",
+            "materials" => "materials",
+            "utilities" => "utilities",
+            "real estate" => "realestate",
+            "communication services" => "comms",
+            "consumer staples" => "staples",
+            _ => "default"
+        };
+    }
+}
+
+<style>
+    .company-card {
+        background: var(--mud-palette-surface) !important;
+        border: 1px solid var(--mud-palette-lines-default);
+    }
+
+    .company-name {
+        font-weight: 600;
+        letter-spacing: -0.5px;
+    }
+
+    .sector-avatar {
+        width: 56px;
+        height: 56px;
+        border-radius: 12px;
+    }
+
+    .sector-icon {
+        font-size: 1.5rem;
+    }
+
+    .sector-chip {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* Sector-specific colors */
+    .sector-avatar.tech { background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%); }
+    .sector-avatar.healthcare { background: linear-gradient(135deg, #276749 0%, #48bb78 100%); }
+    .sector-avatar.consumer { background: linear-gradient(135deg, #744210 0%, #d69e2e 100%); }
+    .sector-avatar.financials { background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%); }
+    .sector-avatar.energy { background: linear-gradient(135deg, #7b341e 0%, #ed8936 100%); }
+    .sector-avatar.industrials { background: linear-gradient(135deg, #1a202c 0%, #718096 100%); }
+    .sector-avatar.materials { background: linear-gradient(135deg, #553c9a 0%, #9f7aea 100%); }
+    .sector-avatar.utilities { background: linear-gradient(135deg, #285e61 0%, #38b2ac 100%); }
+    .sector-avatar.realestate { background: linear-gradient(135deg, #702459 0%, #b83280 100%); }
+    .sector-avatar.comms { background: linear-gradient(135deg, #3182ce 0%, #63b3ed 100%); }
+    .sector-avatar.staples { background: linear-gradient(135deg, #22543d 0%, #68d391 100%); }
+    .sector-avatar.default { background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%); }
+
+    .snapshot-info {
+        text-align: right;
+    }
+
+    @@media (max-width: 640px) {
+        .company-card {
+            padding: 12px !important;
+        }
+
+        .company-name {
+            font-size: 1.25rem;
+        }
+
+        .sector-avatar {
+            width: 44px;
+            height: 44px;
+        }
+
+        .sector-icon {
+            font-size: 1.2rem;
+        }
+
+        .snapshot-info {
+            display: none;
+        }
+    }
+</style>

@@ -1,0 +1,145 @@
+@namespace TrapValueGame.Components.Game
+@implements IDisposable
+
+<MudPaper Class="pa-4 narrative-panel" Elevation="0">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Market Snapshot</MudText>
+        </MudStack>
+
+        @if (_isTyping && !string.IsNullOrEmpty(Narrative))
+        {
+            <MudButton
+                Variant="Variant.Text"
+                Color="Color.Secondary"
+                Size="Size.Small"
+                EndIcon="@Icons.Material.Filled.SkipNext"
+                OnClick="Skip">
+                Skip
+            </MudButton>
+        }
+    </MudStack>
+
+    <div class="narrative-content">
+        <MudText Typo="Typo.body1" Style="line-height: 1.8; white-space: pre-wrap;">
+            @_displayedText<span class="typing-cursor @(_isTyping ? "visible" : "")">|</span>
+        </MudText>
+    </div>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public string? Narrative { get; set; }
+
+    [Parameter]
+    public int TypeSpeed { get; set; } = 15; // ms per character
+
+    [Parameter]
+    public EventCallback OnComplete { get; set; }
+
+    private string _displayedText = "";
+    private bool _isTyping = false;
+    private CancellationTokenSource? _typingCts;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(Narrative) && _displayedText != Narrative)
+        {
+            await StartTyping();
+        }
+    }
+
+    private async Task StartTyping()
+    {
+        // Cancel any ongoing typing
+        _typingCts?.Cancel();
+        _typingCts = new CancellationTokenSource();
+        var token = _typingCts.Token;
+
+        _displayedText = "";
+        _isTyping = true;
+        StateHasChanged();
+
+        try
+        {
+            foreach (var ch in Narrative!)
+            {
+                if (token.IsCancellationRequested)
+                    break;
+
+                _displayedText += ch;
+                StateHasChanged();
+
+                // Variable speed: pause longer after punctuation
+                var delay = TypeSpeed;
+                if (ch is '.' or '!' or '?')
+                    delay = TypeSpeed * 10;
+                else if (ch is ',' or ':' or ';')
+                    delay = TypeSpeed * 5;
+
+                await Task.Delay(delay, token);
+            }
+
+            _isTyping = false;
+            StateHasChanged();
+            await OnComplete.InvokeAsync();
+        }
+        catch (TaskCanceledException)
+        {
+            // Typing was cancelled (skipped)
+        }
+    }
+
+    private async Task Skip()
+    {
+        _typingCts?.Cancel();
+        _displayedText = Narrative ?? "";
+        _isTyping = false;
+        StateHasChanged();
+        await OnComplete.InvokeAsync();
+    }
+
+    public void Dispose()
+    {
+        _typingCts?.Cancel();
+        _typingCts?.Dispose();
+    }
+}
+
+<style>
+    .narrative-panel {
+        background: var(--mud-palette-background-gray) !important;
+        border-left: 3px solid var(--mud-palette-primary);
+    }
+
+    .narrative-content {
+        min-height: 100px;
+    }
+
+    .typing-cursor {
+        opacity: 0;
+        animation: none;
+    }
+
+    .typing-cursor.visible {
+        opacity: 1;
+        animation: blink 0.8s infinite;
+    }
+
+    @@keyframes blink {
+        0%, 50% {
+            opacity: 1;
+        }
+        51%, 100% {
+            opacity: 0;
+        }
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .typing-cursor {
+            animation: none !important;
+            opacity: 1;
+        }
+    }
+</style>

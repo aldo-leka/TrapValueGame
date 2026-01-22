@@ -17,6 +17,7 @@ async def get_next_snapshot(
 
     try:
         # Build query with filters
+        # Only return snapshots where the stock has at least 1 financial record
         query = """
             SELECT s.id, s.snapshot_date, s.narrative, s.stock_id,
                    st.fake_name, st.sector, st.industry
@@ -24,6 +25,10 @@ async def get_next_snapshot(
             JOIN stocks st ON s.stock_id = st.id
             WHERE st.is_active = 1
               AND s.outcome_label IN ('value', 'trap')
+              AND EXISTS (
+                  SELECT 1 FROM financials f
+                  WHERE f.stock_id = s.stock_id
+              )
         """
         params = []
 
@@ -149,17 +154,20 @@ async def reveal_outcome(snapshot_id: int, player_choice: str):
 
 
 async def get_financials_for_snapshot(db, stock_id: int, snapshot_date) -> list[FinancialYear]:
-    """Get 5 years of financials before snapshot date."""
+    """Get up to 5 years of financials for the stock.
+
+    Note: Ideally we'd filter by report_date <= snapshot_date for point-in-time accuracy,
+    but the current data doesn't support this well. For now, just get the most recent 5 years.
+    """
     query = """
         SELECT fiscal_year, revenue, gross_margin, operating_income,
                ebitda, net_income, free_cash_flow, total_debt, cash_and_equivalents
         FROM financials
         WHERE stock_id = ?
-          AND report_date <= ?
         ORDER BY fiscal_year DESC
         LIMIT 5
     """
-    async with db.execute(query, [stock_id, snapshot_date]) as cursor:
+    async with db.execute(query, [stock_id]) as cursor:
         rows = await cursor.fetchall()
 
     # Return in chronological order (oldest first)

@@ -1,0 +1,48 @@
+@namespace TrapValueGame.Components.Game
+@using TrapValueGame.Models
+
+<MudStack Spacing="4">
+    @* Company Header *@
+    <CompanyCard
+        FakeName="@(Snapshot?.FakeName ?? "Unknown")"
+        Sector="@(Snapshot?.Sector ?? "Unknown")"
+        Industry="@Snapshot?.Industry"
+        SnapshotDate="@(Snapshot?.SnapshotDate ?? DateTime.Now)"
+        YearsOfData="@(Snapshot?.Financials?.Count ?? 0)" />
+
+    @* Financial Data Table *@
+    <FinancialTable Data="@Snapshot?.Financials" />
+
+    @* Narrative (if available) *@
+    @if (!string.IsNullOrEmpty(Snapshot?.Narrative))
+    {
+        <NarrativePanel Narrative="@Snapshot.Narrative" TypeSpeed="12" />
+    }
+
+    @* Decision Area with Swipe Card *@
+    <MudPaper Class="pa-4" Elevation="0">
+        <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary" Class="mb-4">
+            Based on these financials from @Snapshot?.SnapshotDate.ToString("MMMM yyyy"),
+            what happened to this stock over the next 24 months?
+        </MudText>
+
+        <SwipeCard OnDecision="OnDecision" IsEnabled="true" />
+
+        <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mt-4 px-4">
+            <MudText Typo="Typo.caption" Color="Color.Error">
+                Stock dropped 20%+
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Success">
+                Stock rose 30%+
+            </MudText>
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    [Parameter]
+    public SnapshotData? Snapshot { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnDecision { get; set; }
+}

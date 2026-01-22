@@ -1,0 +1,161 @@
+@namespace TrapValueGame.Components.Game
+@using TrapValueGame.Models
+@using System.Globalization
+
+<MudStack Spacing="4">
+    @* Result Header *@
+    <MudPaper Class="pa-6 text-center" Elevation="0">
+        @if (Reveal?.IsCorrect == true)
+        {
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle"
+                     Color="Color.Success"
+                     Size="Size.Large"
+                     Class="mb-2" />
+            <MudText Typo="Typo.h4" Color="Color.Success">Correct!</MudText>
+        }
+        else
+        {
+            <MudIcon Icon="@Icons.Material.Filled.Cancel"
+                     Color="Color.Error"
+                     Size="Size.Large"
+                     Class="mb-2" />
+            <MudText Typo="Typo.h4" Color="Color.Error">Wrong!</MudText>
+        }
+
+        <MudText Typo="Typo.body1" Class="mt-2">
+            You guessed <strong class="@(Reveal?.PlayerChoice == "trap" ? "mud-error-text" : "mud-success-text")">@Reveal?.PlayerChoice?.ToUpperInvariant()</strong>,
+            and it was actually a <strong class="@(Reveal?.OutcomeLabel == "trap" ? "mud-error-text" : "mud-success-text")">@Reveal?.OutcomeLabel?.ToUpperInvariant()</strong>
+        </MudText>
+    </MudPaper>
+
+    @* Company Reveal *@
+    <MudPaper Class="pa-4" Elevation="0">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.overline" Color="Color.Secondary">The Company Was</MudText>
+                <MudText Typo="Typo.h4">@Reveal?.CompanyName</MudText>
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary">@Reveal?.Ticker</MudChip>
+            </MudStack>
+            <MudStack AlignItems="AlignItems.End">
+                <MudText Typo="Typo.h3" Class="@GetReturnClass()">
+                    @FormatReturn(Reveal?.Return24Mo)
+                </MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    24-Month Return
+                </MudText>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+
+    @* Price Journey *@
+    <MudPaper Class="pa-4" Elevation="0">
+        <MudText Typo="Typo.h6" Class="mb-3">Price Journey</MudText>
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.End">
+            <MudStack AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @Reveal?.SnapshotDate.ToString("MMM yyyy")
+                </MudText>
+                <MudText Typo="Typo.h5">
+                    @FormatPrice(Reveal?.PriceAtSnapshot)
+                </MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Starting Price</MudText>
+            </MudStack>
+
+            <MudIcon Icon="@Icons.Material.Filled.TrendingFlat"
+                     Color="Color.Secondary"
+                     Size="Size.Large" />
+
+            <MudStack AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @Reveal?.SnapshotDate.AddMonths(24).ToString("MMM yyyy")
+                </MudText>
+                <MudText Typo="Typo.h5" Class="@GetReturnClass()">
+                    @FormatPrice(Reveal?.PriceAt24Mo)
+                </MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Ending Price</MudText>
+            </MudStack>
+        </MudStack>
+
+        @* Price Chart *@
+        @if (Reveal?.PriceSeries != null && Reveal.PriceSeries.Count > 0)
+        {
+            <MudDivider Class="my-4" />
+            <PriceChart
+                Data="@Reveal.PriceSeries"
+                StartPrice="@Reveal.PriceAtSnapshot"
+                EndPrice="@Reveal.PriceAt24Mo"
+                Animate="true" />
+        }
+    </MudPaper>
+
+    @* Session Stats *@
+    <MudPaper Class="pa-4" Elevation="0">
+        <MudStack Row="true" Justify="Justify.SpaceAround">
+            <MudStack AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.h4">@TotalPlayed</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Played</MudText>
+            </MudStack>
+            <MudStack AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.h4" Color="Color.Success">@CorrectGuesses</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Correct</MudText>
+            </MudStack>
+            <MudStack AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.h4">@GetAccuracy()%</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Accuracy</MudText>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+
+    @* Play Again *@
+    <MudButton
+        Variant="Variant.Filled"
+        Color="Color.Primary"
+        Size="Size.Large"
+        FullWidth="true"
+        StartIcon="@Icons.Material.Filled.Replay"
+        OnClick="@(() => OnPlayAgain.InvokeAsync())"
+        Class="mt-4">
+        Play Again
+    </MudButton>
+</MudStack>
+
+@code {
+    [Parameter]
+    public RevealData? Reveal { get; set; }
+
+    [Parameter]
+    public int TotalPlayed { get; set; }
+
+    [Parameter]
+    public int CorrectGuesses { get; set; }
+
+    [Parameter]
+    public EventCallback OnPlayAgain { get; set; }
+
+    private string FormatPrice(decimal? value)
+    {
+        if (!value.HasValue) return "-";
+        return "$" + value.Value.ToString("N2", CultureInfo.InvariantCulture);
+    }
+
+    private string FormatReturn(decimal? value)
+    {
+        if (!value.HasValue) return "-";
+        var percent = value.Value * 100;
+        var sign = percent >= 0 ? "+" : "";
+        return sign + percent.ToString("N1", CultureInfo.InvariantCulture) + "%";
+    }
+
+    private string GetReturnClass()
+    {
+        if (Reveal?.Return24Mo == null) return "";
+        return Reveal.Return24Mo >= 0 ? "mud-success-text" : "mud-error-text";
+    }
+
+    private string GetAccuracy()
+    {
+        if (TotalPlayed == 0) return "0";
+        return ((double)CorrectGuesses / TotalPlayed * 100).ToString("N0", CultureInfo.InvariantCulture);
+    }
+}
+

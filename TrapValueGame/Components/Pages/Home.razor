@@ -1,5 +1,4 @@
 @page "/"
-@page "/game"
 
 <PageTitle>Trap Or Value</PageTitle>
 
@@ -9,7 +8,12 @@
         <MudText Typo="Typo.body1" Class="mb-6" Color="Color.Secondary">
             Analyze historical stock data. Make your call. See what happened next.
         </MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large">
+        <MudText Typo="Typo.body2" Class="mb-6" Color="Color.Secondary">
+            We'll show you 5 years of financial data from a mystery company at a specific moment in time.
+            Your job? Decide if the stock was a <strong class="mud-success-text">VALUE</strong> opportunity
+            (rose 30%+) or a <strong class="mud-error-text">TRAP</strong> (dropped 20%+) over the next 24 months.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" Href="/game">
             Start Playing
         </MudButton>
     </MudPaper>

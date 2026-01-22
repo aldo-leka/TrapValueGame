@@ -1,0 +1,274 @@
+@namespace TrapValueGame.Components.Game
+@using TrapValueGame.Models
+@using System.Globalization
+
+<div class="price-chart-container">
+    @if (Data != null && Data.Count > 1)
+    {
+        // Sample the data to max 50 points for smooth rendering
+        var sortedData = Data.OrderBy(p => p.Date).ToList();
+        var sampledData = SampleData(sortedData, 50);
+
+        var minPrice = (double)sampledData.Min(p => p.Price);
+        var maxPrice = (double)sampledData.Max(p => p.Price);
+        var priceRange = maxPrice - minPrice;
+
+        // Add padding
+        var padding = priceRange * 0.1;
+        minPrice -= padding;
+        maxPrice += padding;
+        priceRange = maxPrice - minPrice;
+
+        // Prevent division by zero
+        if (priceRange < 0.01) priceRange = 1;
+
+        var chartWidth = 400;
+        var chartHeight = 150;
+        var pointCount = sampledData.Count;
+
+        // Generate SVG path with InvariantCulture for decimal formatting
+        var pathPoints = new List<string>();
+        var areaPoints = new List<string>();
+
+        for (var i = 0; i < sampledData.Count; i++)
+        {
+            var x = (double)i / (pointCount - 1) * chartWidth;
+            var y = (1 - ((double)sampledData[i].Price - minPrice) / priceRange) * chartHeight;
+
+            pathPoints.Add(string.Format(CultureInfo.InvariantCulture, "{0:F1},{1:F1}", x, y));
+        }
+
+        var pathData = "M " + string.Join(" L ", pathPoints);
+
+        // Area path
+        var firstY = (1 - ((double)sampledData[0].Price - minPrice) / priceRange) * chartHeight;
+        var areaData = string.Format(CultureInfo.InvariantCulture,
+            "M 0,{0} L {1} L {2},{0} Z",
+            chartHeight,
+            string.Join(" L ", pathPoints),
+            chartWidth);
+
+        // Calculate start price line position
+        var startY = (1 - ((double)StartPrice - minPrice) / priceRange) * chartHeight;
+        var endY = (1 - ((double)EndPrice - minPrice) / priceRange) * chartHeight;
+
+        // Determine color based on overall return
+        var isPositive = EndPrice >= StartPrice;
+        var lineColor = isPositive ? "#3FB950" : "#F85149";
+        var gradientId = $"grad-{Guid.NewGuid():N}";
+
+        <svg viewBox="@string.Format(CultureInfo.InvariantCulture, "0 0 {0} {1}", chartWidth, chartHeight)"
+             class="price-chart @(Animate ? "animate" : "")">
+
+            <defs>
+                <linearGradient id="@gradientId" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stop-color="@lineColor" stop-opacity="0.3" />
+                    <stop offset="100%" stop-color="@lineColor" stop-opacity="0.02" />
+                </linearGradient>
+            </defs>
+
+            @* Grid lines *@
+            <line x1="0" y1="@((chartHeight * 0.25).ToString(CultureInfo.InvariantCulture))"
+                  x2="@chartWidth" y2="@((chartHeight * 0.25).ToString(CultureInfo.InvariantCulture))"
+                  stroke="#30363D" stroke-width="1" stroke-dasharray="4,4" />
+            <line x1="0" y1="@((chartHeight * 0.5).ToString(CultureInfo.InvariantCulture))"
+                  x2="@chartWidth" y2="@((chartHeight * 0.5).ToString(CultureInfo.InvariantCulture))"
+                  stroke="#30363D" stroke-width="1" stroke-dasharray="4,4" />
+            <line x1="0" y1="@((chartHeight * 0.75).ToString(CultureInfo.InvariantCulture))"
+                  x2="@chartWidth" y2="@((chartHeight * 0.75).ToString(CultureInfo.InvariantCulture))"
+                  stroke="#30363D" stroke-width="1" stroke-dasharray="4,4" />
+
+            @* Starting price reference line *@
+            <line x1="0" y1="@startY.ToString(CultureInfo.InvariantCulture)"
+                  x2="@chartWidth" y2="@startY.ToString(CultureInfo.InvariantCulture)"
+                  stroke="#8B949E" stroke-width="1" stroke-dasharray="6,6"
+                  class="start-line" />
+
+            @* Area fill *@
+            <path d="@areaData"
+                  fill="url(#@gradientId)"
+                  class="chart-area" />
+
+            @* Main price line *@
+            <path d="@pathData"
+                  fill="none"
+                  stroke="@lineColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="chart-line" />
+
+            @* End point marker *@
+            <circle cx="@chartWidth.ToString(CultureInfo.InvariantCulture)"
+                    cy="@endY.ToString(CultureInfo.InvariantCulture)"
+                    r="5"
+                    fill="@lineColor"
+                    class="end-point" />
+        </svg>
+
+        @* Y-axis labels *@
+        <div class="y-axis">
+            <span class="y-label">@FormatPrice(maxPrice)</span>
+            <span class="y-label">@FormatPrice((minPrice + maxPrice) / 2)</span>
+            <span class="y-label">@FormatPrice(minPrice)</span>
+        </div>
+
+        @* X-axis labels *@
+        <div class="x-axis">
+            <span class="x-label">@sortedData.First().Date.ToString("MMM yy")</span>
+            <span class="x-label">@sortedData[sortedData.Count / 2].Date.ToString("MMM yy")</span>
+            <span class="x-label">@sortedData.Last().Date.ToString("MMM yy")</span>
+        </div>
+    }
+    else
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
+            Price data not available
+        </MudText>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public List<PricePointDto>? Data { get; set; }
+
+    [Parameter]
+    public decimal StartPrice { get; set; }
+
+    [Parameter]
+    public decimal EndPrice { get; set; }
+
+    [Parameter]
+    public bool Animate { get; set; } = true;
+
+    private List<PricePointDto> SampleData(List<PricePointDto> data, int maxPoints)
+    {
+        if (data.Count <= maxPoints)
+            return data;
+
+        var result = new List<PricePointDto>();
+        var step = (double)(data.Count - 1) / (maxPoints - 1);
+
+        for (var i = 0; i < maxPoints; i++)
+        {
+            var index = (int)Math.Round(i * step);
+            index = Math.Min(index, data.Count - 1);
+            result.Add(data[index]);
+        }
+
+        // Always include first and last
+        if (result[0] != data[0])
+            result[0] = data[0];
+        if (result[^1] != data[^1])
+            result[^1] = data[^1];
+
+        return result;
+    }
+
+    private string FormatPrice(double price)
+    {
+        return $"${price:N0}";
+    }
+}
+
+<style>
+    .price-chart-container {
+        position: relative;
+        padding: 20px 40px 30px 50px;
+        background: var(--mud-palette-background-gray);
+        border-radius: 8px;
+    }
+
+    .price-chart {
+        width: 100%;
+        height: 150px;
+        display: block;
+    }
+
+    .chart-area {
+        opacity: 1;
+    }
+
+    .end-point {
+        opacity: 1;
+    }
+
+    .start-line {
+        opacity: 0.5;
+    }
+
+    .price-chart.animate .chart-line {
+        stroke-dasharray: 2000;
+        stroke-dashoffset: 2000;
+        animation: drawLine 1.5s ease-out forwards;
+    }
+
+    .price-chart.animate .chart-area {
+        opacity: 0;
+        animation: fadeIn 0.5s ease-out 1s forwards;
+    }
+
+    .price-chart.animate .end-point {
+        opacity: 0;
+        animation: fadeIn 0.3s ease-out 1.3s forwards;
+    }
+
+    @@keyframes drawLine {
+        to {
+            stroke-dashoffset: 0;
+        }
+    }
+
+    @@keyframes fadeIn {
+        to {
+            opacity: 1;
+        }
+    }
+
+    .y-axis {
+        position: absolute;
+        left: 0;
+        top: 20px;
+        bottom: 30px;
+        width: 45px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        align-items: flex-end;
+        padding-right: 5px;
+    }
+
+    .y-label {
+        font-size: 0.7rem;
+        color: var(--mud-palette-text-secondary);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .x-axis {
+        position: absolute;
+        left: 50px;
+        right: 40px;
+        bottom: 5px;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .x-label {
+        font-size: 0.7rem;
+        color: var(--mud-palette-text-secondary);
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .price-chart.animate .chart-line {
+            animation: none;
+            stroke-dasharray: none;
+            stroke-dashoffset: 0;
+        }
+
+        .price-chart.animate .chart-area,
+        .price-chart.animate .end-point {
+            animation: none;
+            opacity: 1;
+        }
+    }
+</style>

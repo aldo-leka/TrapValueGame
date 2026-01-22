@@ -1,0 +1,304 @@
+@namespace TrapValueGame.Components.Game
+@using TrapValueGame.Models
+
+<MudPaper Class="pa-4 financial-table-wrapper" Elevation="0">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+        <MudText Typo="Typo.h6">Financials</MudText>
+        <MudText Typo="Typo.caption" Color="Color.Secondary">USD Millions</MudText>
+    </MudStack>
+
+    @if (Data != null && Data.Count > 0)
+    {
+        var sortedYears = Data.OrderBy(f => f.FiscalYear).ToList();
+
+        <div class="table-scroll">
+            <table class="financial-table">
+                <thead>
+                    <tr>
+                        <th class="metric-col">Metric</th>
+                        @foreach (var year in sortedYears)
+                        {
+                            <th class="year-col">@year.FiscalYear</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @* Revenue with YoY *@
+                    <tr>
+                        <td class="metric-label">Revenue</td>
+                        @for (var i = 0; i < sortedYears.Count; i++)
+                        {
+                            var year = sortedYears[i];
+                            var prevYear = i > 0 ? sortedYears[i - 1] : null;
+                            <td class="value-cell">
+                                @FormatCurrency(year.Revenue)
+                                @if (prevYear != null && year.Revenue.HasValue && prevYear.Revenue.HasValue && prevYear.Revenue > 0)
+                                {
+                                    var yoy = (year.Revenue.Value - prevYear.Revenue.Value) / prevYear.Revenue.Value;
+                                    <div class="yoy-indicator @GetYoYClass(yoy)">@FormatYoY(yoy)</div>
+                                }
+                            </td>
+                        }
+                    </tr>
+
+                    @* Gross Margin *@
+                    <tr>
+                        <td class="metric-label">Gross Margin</td>
+                        @foreach (var year in sortedYears)
+                        {
+                            <td class="value-cell">@FormatPercent(year.GrossMargin)</td>
+                        }
+                    </tr>
+
+                    @* Operating Income with YoY *@
+                    <tr class="@GetRowHighlight(sortedYears, y => y.OperatingIncome)">
+                        <td class="metric-label">Operating Income</td>
+                        @for (var i = 0; i < sortedYears.Count; i++)
+                        {
+                            var year = sortedYears[i];
+                            var prevYear = i > 0 ? sortedYears[i - 1] : null;
+                            <td class="value-cell @GetValueClass(year.OperatingIncome)">
+                                @FormatCurrency(year.OperatingIncome)
+                                @if (prevYear != null && year.OperatingIncome.HasValue && prevYear.OperatingIncome.HasValue && prevYear.OperatingIncome != 0)
+                                {
+                                    var yoy = (year.OperatingIncome.Value - prevYear.OperatingIncome.Value) / Math.Abs(prevYear.OperatingIncome.Value);
+                                    <div class="yoy-indicator @GetYoYClass(yoy)">@FormatYoY(yoy)</div>
+                                }
+                            </td>
+                        }
+                    </tr>
+
+                    @* EBITDA *@
+                    <tr>
+                        <td class="metric-label">EBITDA</td>
+                        @foreach (var year in sortedYears)
+                        {
+                            <td class="value-cell @GetValueClass(year.Ebitda)">@FormatCurrency(year.Ebitda)</td>
+                        }
+                    </tr>
+
+                    @* Net Income with YoY *@
+                    <tr class="@GetRowHighlight(sortedYears, y => y.NetIncome)">
+                        <td class="metric-label">Net Income</td>
+                        @for (var i = 0; i < sortedYears.Count; i++)
+                        {
+                            var year = sortedYears[i];
+                            var prevYear = i > 0 ? sortedYears[i - 1] : null;
+                            <td class="value-cell @GetValueClass(year.NetIncome)">
+                                @FormatCurrency(year.NetIncome)
+                                @if (prevYear != null && year.NetIncome.HasValue && prevYear.NetIncome.HasValue && prevYear.NetIncome != 0)
+                                {
+                                    var yoy = (year.NetIncome.Value - prevYear.NetIncome.Value) / Math.Abs(prevYear.NetIncome.Value);
+                                    <div class="yoy-indicator @GetYoYClass(yoy)">@FormatYoY(yoy)</div>
+                                }
+                            </td>
+                        }
+                    </tr>
+
+                    @* Free Cash Flow *@
+                    <tr class="@GetRowHighlight(sortedYears, y => y.FreeCashFlow)">
+                        <td class="metric-label">Free Cash Flow</td>
+                        @foreach (var year in sortedYears)
+                        {
+                            <td class="value-cell @GetValueClass(year.FreeCashFlow)">@FormatCurrency(year.FreeCashFlow)</td>
+                        }
+                    </tr>
+
+                    <tr class="section-divider">
+                        <td colspan="@(sortedYears.Count + 1)"></td>
+                    </tr>
+
+                    @* Total Debt *@
+                    <tr>
+                        <td class="metric-label">Total Debt</td>
+                        @foreach (var year in sortedYears)
+                        {
+                            <td class="value-cell">@FormatCurrency(year.TotalDebt)</td>
+                        }
+                    </tr>
+
+                    @* Cash *@
+                    <tr>
+                        <td class="metric-label">Cash & Equivalents</td>
+                        @foreach (var year in sortedYears)
+                        {
+                            <td class="value-cell">@FormatCurrency(year.CashAndEquivalents)</td>
+                        }
+                    </tr>
+
+                    @* Net Debt Position *@
+                    <tr>
+                        <td class="metric-label">Net Debt</td>
+                        @foreach (var year in sortedYears)
+                        {
+                            var netDebt = GetNetDebt(year);
+                            <td class="value-cell @(netDebt > 0 ? "negative-value" : "positive-value")">
+                                @FormatCurrency(netDebt)
+                            </td>
+                        }
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Warning">No financial data available</MudAlert>
+    }
+</MudPaper>
+
+@code {
+    [Parameter]
+    public List<FinancialData>? Data { get; set; }
+
+    private string FormatCurrency(decimal? value)
+    {
+        if (!value.HasValue) return "—";
+        var absValue = Math.Abs(value.Value);
+        var formatted = absValue.ToString("N1");
+        return value < 0 ? $"({formatted})" : formatted;
+    }
+
+    private string FormatPercent(decimal? value)
+    {
+        if (!value.HasValue) return "—";
+        return $"{value.Value * 100:N1}%";
+    }
+
+    private string FormatYoY(decimal yoy)
+    {
+        var percent = yoy * 100;
+        var arrow = yoy >= 0 ? "↑" : "↓";
+        return $"{arrow}{Math.Abs(percent):N1}%";
+    }
+
+    private string GetValueClass(decimal? value)
+    {
+        if (!value.HasValue) return "";
+        return value < 0 ? "negative-value" : "";
+    }
+
+    private string GetYoYClass(decimal yoy)
+    {
+        return yoy >= 0 ? "yoy-positive" : "yoy-negative";
+    }
+
+    private string GetRowHighlight(List<FinancialData> years, Func<FinancialData, decimal?> selector)
+    {
+        // Highlight row if 3+ negative values
+        var negativeCount = years.Count(y => selector(y) < 0);
+        return negativeCount >= 3 ? "highlight-concern" : "";
+    }
+
+    private decimal? GetNetDebt(FinancialData year)
+    {
+        if (!year.TotalDebt.HasValue && !year.CashAndEquivalents.HasValue)
+            return null;
+
+        var debt = year.TotalDebt ?? 0;
+        var cash = year.CashAndEquivalents ?? 0;
+        return debt - cash;
+    }
+}
+
+<style>
+    .financial-table-wrapper {
+        background: var(--mud-palette-surface) !important;
+    }
+
+    .table-scroll {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .financial-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+        font-size: 0.85rem;
+        min-width: 500px;
+    }
+
+    .financial-table th,
+    .financial-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--mud-palette-lines-default);
+    }
+
+    .financial-table th {
+        text-align: center;
+        font-weight: 600;
+        background: var(--mud-palette-background-gray);
+        color: var(--mud-palette-text-secondary);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .financial-table th.metric-col {
+        text-align: left;
+        width: 140px;
+    }
+
+    .metric-label {
+        font-weight: 500;
+        color: var(--mud-palette-text-primary);
+        white-space: nowrap;
+    }
+
+    .value-cell {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        position: relative;
+    }
+
+    .negative-value {
+        color: #F85149 !important;
+    }
+
+    .positive-value {
+        color: #3FB950 !important;
+    }
+
+    .yoy-indicator {
+        font-size: 0.7rem;
+        margin-top: 2px;
+        font-weight: 500;
+    }
+
+    .yoy-positive {
+        color: #3FB950;
+    }
+
+    .yoy-negative {
+        color: #F85149;
+    }
+
+    .highlight-concern {
+        background: rgba(248, 81, 73, 0.08);
+    }
+
+    .section-divider td {
+        padding: 4px 0;
+        border-bottom: 2px solid var(--mud-palette-lines-default);
+    }
+
+    .financial-table tbody tr:hover {
+        background: var(--mud-palette-action-default-hover);
+    }
+
+    @@media (max-width: 768px) {
+        .financial-table {
+            font-size: 0.75rem;
+        }
+
+        .financial-table th,
+        .financial-table td {
+            padding: 8px;
+        }
+
+        .metric-label {
+            font-size: 0.7rem;
+        }
+    }
+</style>

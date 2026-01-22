@@ -1,0 +1,342 @@
+@namespace TrapValueGame.Components.Game
+@inject IJSRuntime JS
+
+<div class="swipe-container" @ref="_containerRef" tabindex="0" @onkeydown="HandleKeyDown">
+    @* Left overlay (TRAP) *@
+    <div class="swipe-overlay trap-overlay @GetOverlayClass("trap")">
+        <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Size="Size.Large" />
+        <MudText Typo="Typo.h4">TRAP</MudText>
+    </div>
+
+    @* Right overlay (VALUE) *@
+    <div class="swipe-overlay value-overlay @GetOverlayClass("value")">
+        <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Large" />
+        <MudText Typo="Typo.h4">VALUE</MudText>
+    </div>
+
+    @* Swipeable card *@
+    <div class="swipe-card @(_isDragging ? "dragging" : "released")"
+         style="transform: translateX(@(_dragX)px) rotate(@(GetRotation())deg);"
+         @onmousedown="HandleMouseDown"
+         @onmouseup="HandleMouseUp"
+         @onmousemove="HandleMouseMove"
+         @onmouseleave="HandleMouseLeave"
+         @ontouchstart="HandleTouchStart"
+         @ontouchend="HandleTouchEnd"
+         @ontouchmove="HandleTouchMove">
+
+        <MudPaper Class="pa-6 swipe-card-content" Elevation="4">
+            <MudStack AlignItems="AlignItems.Center" Spacing="4">
+                <MudIcon Icon="@Icons.Material.Filled.QuestionMark"
+                         Size="Size.Large"
+                         Color="Color.Primary" />
+
+                <MudText Typo="Typo.h5" Align="Align.Center">
+                    What's your verdict?
+                </MudText>
+
+                <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
+                    Swipe or use buttons below
+                </MudText>
+
+                <MudStack Row="true" Spacing="4" Class="mt-2">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.SwipeLeft" Color="Color.Error" />
+                        <MudText Typo="Typo.caption" Color="Color.Error">TRAP</MudText>
+                    </MudStack>
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.SwipeRight" Color="Color.Success" />
+                        <MudText Typo="Typo.caption" Color="Color.Success">VALUE</MudText>
+                    </MudStack>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    </div>
+
+    @* Button fallbacks *@
+    <MudStack Row="true" Justify="Justify.SpaceAround" Class="button-fallback mt-6">
+        <MudButton
+            Variant="Variant.Filled"
+            Color="Color.Error"
+            Size="Size.Large"
+            StartIcon="@Icons.Material.Filled.TrendingDown"
+            OnClick="@(() => TriggerDecision("trap"))"
+            Disabled="@(!IsEnabled)"
+            Class="decision-btn trap-btn">
+            TRAP
+        </MudButton>
+
+        <MudButton
+            Variant="Variant.Filled"
+            Color="Color.Success"
+            Size="Size.Large"
+            EndIcon="@Icons.Material.Filled.TrendingUp"
+            OnClick="@(() => TriggerDecision("value"))"
+            Disabled="@(!IsEnabled)"
+            Class="decision-btn value-btn">
+            VALUE
+        </MudButton>
+    </MudStack>
+
+    <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary" Class="mt-2">
+        Or press <kbd>A</kbd> / <kbd>←</kbd> for Trap, <kbd>D</kbd> / <kbd>→</kbd> for Value
+    </MudText>
+</div>
+
+@code {
+    [Parameter]
+    public EventCallback<string> OnDecision { get; set; }
+
+    [Parameter]
+    public bool IsEnabled { get; set; } = true;
+
+    private ElementReference _containerRef;
+    private double _dragX = 0;
+    private double _dragStartX = 0;
+    private bool _isDragging = false;
+    private bool _isDecisionMade = false;
+
+    private const double SwipeThreshold = 100;
+    private const double PeekThreshold = 30;
+    private const double MaxRotation = 15;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Focus the container for keyboard events
+            await JS.InvokeVoidAsync("eval", $"document.querySelector('.swipe-container')?.focus()");
+        }
+    }
+
+    private void HandleMouseDown(MouseEventArgs e)
+    {
+        if (!IsEnabled || _isDecisionMade) return;
+        _isDragging = true;
+        _dragStartX = e.ClientX;
+    }
+
+    private void HandleMouseMove(MouseEventArgs e)
+    {
+        if (!_isDragging || !IsEnabled || _isDecisionMade) return;
+        _dragX = e.ClientX - _dragStartX;
+        StateHasChanged();
+    }
+
+    private async Task HandleMouseUp(MouseEventArgs e)
+    {
+        if (!_isDragging) return;
+        await CheckSwipeComplete();
+    }
+
+    private async Task HandleMouseLeave(MouseEventArgs e)
+    {
+        if (!_isDragging) return;
+        await CheckSwipeComplete();
+    }
+
+    private void HandleTouchStart(TouchEventArgs e)
+    {
+        if (!IsEnabled || _isDecisionMade) return;
+        if (e.Touches.Length > 0)
+        {
+            _isDragging = true;
+            _dragStartX = e.Touches[0].ClientX;
+        }
+    }
+
+    private void HandleTouchMove(TouchEventArgs e)
+    {
+        if (!_isDragging || !IsEnabled || _isDecisionMade) return;
+        if (e.Touches.Length > 0)
+        {
+            _dragX = e.Touches[0].ClientX - _dragStartX;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleTouchEnd(TouchEventArgs e)
+    {
+        if (!_isDragging) return;
+        await CheckSwipeComplete();
+    }
+
+    private async Task CheckSwipeComplete()
+    {
+        _isDragging = false;
+
+        if (Math.Abs(_dragX) >= SwipeThreshold)
+        {
+            var choice = _dragX > 0 ? "value" : "trap";
+            await TriggerDecision(choice);
+        }
+        else
+        {
+            // Snap back
+            _dragX = 0;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (!IsEnabled || _isDecisionMade) return;
+
+        switch (e.Key)
+        {
+            case "ArrowLeft":
+            case "a":
+            case "A":
+                await TriggerDecision("trap");
+                break;
+            case "ArrowRight":
+            case "d":
+            case "D":
+                await TriggerDecision("value");
+                break;
+        }
+    }
+
+    private async Task TriggerDecision(string choice)
+    {
+        if (!IsEnabled || _isDecisionMade) return;
+
+        _isDecisionMade = true;
+
+        // Animate card flying off screen
+        _dragX = choice == "value" ? 500 : -500;
+        StateHasChanged();
+
+        await Task.Delay(200);
+        await OnDecision.InvokeAsync(choice);
+    }
+
+    private string GetOverlayClass(string side)
+    {
+        var threshold = side == "trap" ? -PeekThreshold : PeekThreshold;
+        var fullThreshold = side == "trap" ? -SwipeThreshold : SwipeThreshold;
+
+        if (side == "trap")
+        {
+            if (_dragX <= fullThreshold) return "full";
+            if (_dragX <= threshold) return "peeking";
+        }
+        else
+        {
+            if (_dragX >= fullThreshold) return "full";
+            if (_dragX >= threshold) return "peeking";
+        }
+
+        return "";
+    }
+
+    private double GetRotation()
+    {
+        return (_dragX / SwipeThreshold) * MaxRotation;
+    }
+}
+
+<style>
+    .swipe-container {
+        position: relative;
+        width: 100%;
+        min-height: 250px;
+        outline: none;
+    }
+
+    .swipe-overlay {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 50%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    .trap-overlay {
+        left: 0;
+        background: linear-gradient(90deg, rgba(248, 81, 73, 0.3) 0%, transparent 100%);
+        color: #F85149;
+    }
+
+    .value-overlay {
+        right: 0;
+        background: linear-gradient(-90deg, rgba(63, 185, 80, 0.3) 0%, transparent 100%);
+        color: #3FB950;
+    }
+
+    .swipe-overlay.peeking {
+        opacity: 0.5;
+    }
+
+    .swipe-overlay.full {
+        opacity: 1;
+    }
+
+    .swipe-card {
+        position: relative;
+        z-index: 10;
+        cursor: grab;
+        user-select: none;
+        touch-action: pan-y;
+    }
+
+    .swipe-card.dragging {
+        cursor: grabbing;
+        transition: none;
+    }
+
+    .swipe-card.released {
+        transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .swipe-card-content {
+        background: var(--mud-palette-surface) !important;
+        border: 1px solid var(--mud-palette-lines-default);
+        border-radius: 12px;
+    }
+
+    .decision-btn {
+        min-width: 140px;
+        padding: 16px 32px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .trap-btn:hover:not(:disabled) {
+        transform: scale(1.05);
+        box-shadow: 0 4px 20px rgba(248, 81, 73, 0.4);
+    }
+
+    .value-btn:hover:not(:disabled) {
+        transform: scale(1.05);
+        box-shadow: 0 4px 20px rgba(63, 185, 80, 0.4);
+    }
+
+    kbd {
+        padding: 2px 6px;
+        font-size: 0.75rem;
+        background: var(--mud-palette-background-gray);
+        border: 1px solid var(--mud-palette-lines-default);
+        border-radius: 4px;
+        font-family: monospace;
+    }
+
+    @@media (max-width: 640px) {
+        .swipe-card-content {
+            padding: 24px 16px;
+        }
+
+        .decision-btn {
+            min-width: 120px;
+            padding: 12px 24px;
+        }
+    }
+</style>

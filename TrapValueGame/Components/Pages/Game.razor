@@ -1,0 +1,68 @@
+@page "/game"
+@using TrapValueGame.Services
+@using TrapValueGame.Models
+@inject GameStateService GameState
+@implements IDisposable
+
+<PageTitle>Trap Or Value - Play</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    @switch (GameState.CurrentState)
+    {
+        case Services.GameState.Loading:
+            <LoadingState />
+            break;
+
+        case Services.GameState.Analyzing:
+            <AnalyzingState
+                Snapshot="GameState.CurrentSnapshot"
+                OnDecision="HandleDecision" />
+            break;
+
+        case Services.GameState.Revealing:
+            <RevealingState Choice="@GameState.PlayerChoice" />
+            break;
+
+        case Services.GameState.Result:
+            <ResultState
+                Reveal="GameState.CurrentReveal"
+                TotalPlayed="GameState.TotalPlayed"
+                CorrectGuesses="GameState.CorrectGuesses"
+                OnPlayAgain="HandlePlayAgain" />
+            break;
+
+        case Services.GameState.Error:
+            <ErrorState
+                Message="@GameState.ErrorMessage"
+                OnRetry="HandleRetry" />
+            break;
+    }
+</MudContainer>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        GameState.OnStateChanged += StateHasChanged;
+        await GameState.LoadNextSnapshotAsync();
+    }
+
+    private async Task HandleDecision(string choice)
+    {
+        await GameState.MakeDecisionAsync(choice);
+    }
+
+    private async Task HandlePlayAgain()
+    {
+        await GameState.PlayAgainAsync();
+    }
+
+    private async Task HandleRetry()
+    {
+        await GameState.LoadNextSnapshotAsync();
+    }
+
+    public void Dispose()
+    {
+        GameState.OnStateChanged -= StateHasChanged;
+    }
+}

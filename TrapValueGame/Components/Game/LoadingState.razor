@@ -1,0 +1,29 @@
+@namespace TrapValueGame.Components.Game
+
+<MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="min-vh-50 py-16">
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+    <MudText Typo="Typo.h6" Class="mt-4" Color="Color.Secondary">
+        Finding your next case...
+    </MudText>
+
+    @* Skeleton preview of what's coming *@
+    <MudPaper Class="mt-8 pa-4" Style="width: 100%; max-width: 600px;" Elevation="0">
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="24px" Width="60%" Class="mb-4" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="16px" Width="40%" Class="mb-6" />
+
+        @* Financial table skeleton *@
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="200px" Class="mb-4" />
+
+        @* Action buttons skeleton *@
+        <MudStack Row="true" Justify="Justify.SpaceAround" Class="mt-4">
+            <MudSkeleton SkeletonType="SkeletonType.Circle" Width="80px" Height="80px" />
+            <MudSkeleton SkeletonType="SkeletonType.Circle" Width="80px" Height="80px" />
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+<style>
+    .min-vh-50 {
+        min-height: 50vh;
+    }
+</style>

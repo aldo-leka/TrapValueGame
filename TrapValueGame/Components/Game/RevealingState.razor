@@ -1,0 +1,36 @@
+@namespace TrapValueGame.Components.Game
+
+<MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="min-vh-50 py-16">
+    <MudText Typo="Typo.h4" Class="mb-4">
+        You said
+        <span class="@(Choice == "trap" ? "mud-error-text" : "mud-success-text")">
+            @(Choice?.ToUpperInvariant())
+        </span>
+    </MudText>
+
+    <MudProgressCircular Color="@(Choice == "trap" ? Color.Error : Color.Success)"
+                         Indeterminate="true"
+                         Size="Size.Large" />
+
+    <MudText Typo="Typo.h6" Class="mt-4" Color="Color.Secondary">
+        Checking the markets...
+    </MudText>
+
+    <MudStack Row="true" Spacing="1" Class="mt-8">
+        <MudIcon Icon="@Icons.Material.Filled.ShowChart" Color="Color.Secondary" />
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Analyzing 24 months of price data
+        </MudText>
+    </MudStack>
+</MudStack>
+
+@code {
+    [Parameter]
+    public string? Choice { get; set; }
+}
+
+<style>
+    .min-vh-50 {
+        min-height: 50vh;
+    }
+</style>
