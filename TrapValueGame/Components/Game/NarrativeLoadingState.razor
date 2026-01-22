@@ -1,0 +1,24 @@
+@namespace TrapValueGame.Components.Game
+
+<MudPaper Class="pa-4 narrative-loading" Elevation="0">
+    <div class="d-flex align-center mb-3">
+        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-3" />
+        <MudText Typo="Typo.subtitle1">Analyzing market conditions...</MudText>
+    </div>
+
+    <MudSkeleton SkeletonType="SkeletonType.Text" Width="100%" Height="20px" Class="mb-2" />
+    <MudSkeleton SkeletonType="SkeletonType.Text" Width="95%" Height="20px" Class="mb-2" />
+    <MudSkeleton SkeletonType="SkeletonType.Text" Width="88%" Height="20px" Class="mb-4" />
+
+    <MudSkeleton SkeletonType="SkeletonType.Text" Width="100%" Height="20px" Class="mb-2" />
+    <MudSkeleton SkeletonType="SkeletonType.Text" Width="92%" Height="20px" Class="mb-2" />
+    <MudSkeleton SkeletonType="SkeletonType.Text" Width="85%" Height="20px" />
+</MudPaper>
+
+<style>
+    .narrative-loading {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+    }
+</style>

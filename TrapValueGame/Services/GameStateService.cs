@@ -15,6 +15,8 @@ public class GameStateService
 {
     private readonly GameService _gameService;
     private readonly LocalStorageService _localStorageService;
+    private readonly GeminiService _geminiService;
+    private readonly ApiKeyService _apiKeyService;
     private readonly ILogger<GameStateService> _logger;
 
     public GameState CurrentState { get; private set; } = GameState.Loading;
@@ -22,6 +24,10 @@ public class GameStateService
     public RevealData? CurrentReveal { get; private set; }
     public string? PlayerChoice { get; private set; }
     public string? ErrorMessage { get; private set; }
+
+    // Narrative state
+    public NarrativeDisplayState NarrativeState { get; private set; } = NarrativeDisplayState.NoApiKey;
+    public string? GeneratedNarrative { get; private set; }
 
     // Track played snapshots - now backed by localStorage
     private List<int> _playedSnapshotIds = [];
@@ -40,10 +46,14 @@ public class GameStateService
     public GameStateService(
         GameService gameService,
         LocalStorageService localStorageService,
+        GeminiService geminiService,
+        ApiKeyService apiKeyService,
         ILogger<GameStateService> logger)
     {
         _gameService = gameService;
         _localStorageService = localStorageService;
+        _geminiService = geminiService;
+        _apiKeyService = apiKeyService;
         _logger = logger;
     }
 
@@ -99,12 +109,16 @@ public class GameStateService
             CurrentSnapshot = snapshot;
             CurrentReveal = null;
             PlayerChoice = null;
+            GeneratedNarrative = null;
             CurrentState = GameState.Analyzing;
 
             _logger.LogInformation("Loaded snapshot {SnapshotId}: {FakeName} ({Year})",
                 snapshot.SnapshotId, snapshot.FakeName, snapshot.SnapshotYear);
 
             NotifyStateChanged();
+
+            // Start narrative generation in background (non-blocking)
+            _ = GenerateNarrativeAsync();
         }
         catch (Exception ex)
         {
@@ -175,6 +189,72 @@ public class GameStateService
     public async Task PlayAgainAsync()
     {
         await LoadNextSnapshotAsync();
+    }
+
+    /// <summary>
+    /// Generates an AI narrative for the current snapshot.
+    /// Runs in background and updates NarrativeState/GeneratedNarrative.
+    /// </summary>
+    private async Task GenerateNarrativeAsync()
+    {
+        if (!_apiKeyService.HasApiKey)
+        {
+            NarrativeState = NarrativeDisplayState.NoApiKey;
+            NotifyStateChanged();
+            return;
+        }
+
+        if (CurrentSnapshot == null)
+            return;
+
+        NarrativeState = NarrativeDisplayState.Loading;
+        NotifyStateChanged();
+
+        try
+        {
+            var narrative = await _geminiService.GenerateNarrativeAsync(
+                CurrentSnapshot.Sector,
+                CurrentSnapshot.SnapshotDate,
+                CurrentSnapshot.Financials
+            );
+
+            if (!string.IsNullOrEmpty(narrative))
+            {
+                GeneratedNarrative = narrative;
+                NarrativeState = NarrativeDisplayState.Ready;
+            }
+            else
+            {
+                NarrativeState = NarrativeDisplayState.Error;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to generate narrative");
+            NarrativeState = NarrativeDisplayState.Error;
+        }
+
+        NotifyStateChanged();
+    }
+
+    /// <summary>
+    /// Refreshes the narrative state based on current API key configuration.
+    /// Call this after API key is configured/cleared.
+    /// </summary>
+    public void RefreshNarrativeState()
+    {
+        if (!_apiKeyService.HasApiKey)
+        {
+            NarrativeState = NarrativeDisplayState.NoApiKey;
+            GeneratedNarrative = null;
+        }
+        else if (CurrentSnapshot != null && string.IsNullOrEmpty(GeneratedNarrative))
+        {
+            // API key just configured and we have a snapshot - generate narrative
+            _ = GenerateNarrativeAsync();
+        }
+
+        NotifyStateChanged();
     }
 
     /// <summary>

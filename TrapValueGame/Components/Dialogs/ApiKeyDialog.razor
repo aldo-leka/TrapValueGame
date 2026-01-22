@@ -1,0 +1,106 @@
+@namespace TrapValueGame.Components.Dialogs
+@inject TrapValueGame.Services.ApiKeyService ApiKeyService
+@inject TrapValueGame.Services.GeminiService GeminiService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-2" />
+            Gemini API Key
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Enter your Gemini API key to enable AI-generated market narratives.
+            Your key is stored only in memory and cleared when you refresh or close the page.
+        </MudText>
+
+        <MudTextField @bind-Value="_apiKey"
+                      Label="API Key"
+                      Variant="Variant.Outlined"
+                      InputType="@(_showKey ? InputType.Text : InputType.Password)"
+                      Adornment="Adornment.End"
+                      AdornmentIcon="@(_showKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                      OnAdornmentClick="() => _showKey = !_showKey"
+                      Immediate="true"
+                      FullWidth="true"
+                      Class="mb-3" />
+
+        @if (!string.IsNullOrEmpty(_testResult))
+        {
+            <MudAlert Severity="@(_testSuccess ? Severity.Success : Severity.Error)" Class="mb-3">
+                @_testResult
+            </MudAlert>
+        }
+
+        <MudLink Href="https://aistudio.google.com/apikey" Target="_blank" Typo="Typo.caption">
+            Get a free API key from Google AI Studio
+        </MudLink>
+    </DialogContent>
+    <DialogActions>
+        @if (ApiKeyService.HasApiKey)
+        {
+            <MudButton OnClick="ClearKey" Color="Color.Error" Variant="Variant.Text">
+                Clear Key
+            </MudButton>
+        }
+        <MudSpacer />
+        <MudButton OnClick="TestConnection" Disabled="@(string.IsNullOrWhiteSpace(_apiKey) || _testing)">
+            @if (_testing)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Test Connection
+        </MudButton>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Save" Disabled="@string.IsNullOrWhiteSpace(_apiKey)">
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private string? _apiKey;
+    private bool _showKey;
+    private bool _testing;
+    private bool _testSuccess;
+    private string? _testResult;
+
+    protected override void OnInitialized()
+    {
+        _apiKey = ApiKeyService.GetApiKey();
+    }
+
+    private async Task TestConnection()
+    {
+        _testing = true;
+        _testResult = null;
+        StateHasChanged();
+
+        ApiKeyService.SetApiKey(_apiKey);
+        var (success, error) = await GeminiService.TestApiKeyAsync();
+
+        _testSuccess = success;
+        _testResult = success ? "Connection successful!" : $"Error: {error}";
+        _testing = false;
+    }
+
+    private void Save()
+    {
+        ApiKeyService.SetApiKey(_apiKey);
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void ClearKey()
+    {
+        ApiKeyService.ClearApiKey();
+        _apiKey = null;
+        _testResult = null;
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

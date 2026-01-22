@@ -1,0 +1,32 @@
+@namespace TrapValueGame.Components.Game
+@using TrapValueGame.Components.Dialogs
+@inject IDialogService DialogService
+
+<MudPaper Class="pa-4 narrative-prompt" Elevation="0">
+    <div class="d-flex flex-column align-center text-center">
+        <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Large" Color="Color.Secondary" Class="mb-2" />
+        <MudText Typo="Typo.subtitle1" Class="mb-1">AI Analysis Unavailable</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Configure your Gemini API key to enable AI-generated market narratives.
+        </MudText>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="OpenSettings">
+            <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-1" Size="Size.Small" />
+            Configure Settings
+        </MudButton>
+    </div>
+</MudPaper>
+
+<style>
+    .narrative-prompt {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px dashed rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+    }
+</style>
+
+@code {
+    private async Task OpenSettings()
+    {
+        await DialogService.ShowAsync<ApiKeyDialog>("API Key Settings");
+    }
+}

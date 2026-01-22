@@ -13,10 +13,26 @@
     @* Financial Data Table *@
     <FinancialTable Data="@Snapshot?.Financials" />
 
-    @* Narrative (if available) *@
-    @if (!string.IsNullOrEmpty(Snapshot?.Narrative))
+    @* AI Narrative Section *@
+    @switch (NarrativeState)
     {
-        <NarrativePanel Narrative="@Snapshot.Narrative" TypeSpeed="12" />
+        case NarrativeDisplayState.Loading:
+            <NarrativeLoadingState />
+            break;
+
+        case NarrativeDisplayState.Ready:
+            <NarrativePanel Narrative="@Narrative" TypeSpeed="12" />
+            break;
+
+        case NarrativeDisplayState.NoApiKey:
+            <NarrativePrompt />
+            break;
+
+        case NarrativeDisplayState.Error:
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                Unable to generate AI analysis. You can still make your decision based on the financials.
+            </MudAlert>
+            break;
     }
 
     @* Decision Area with Swipe Card *@
@@ -42,6 +58,12 @@
 @code {
     [Parameter]
     public SnapshotData? Snapshot { get; set; }
+
+    [Parameter]
+    public NarrativeDisplayState NarrativeState { get; set; }
+
+    [Parameter]
+    public string? Narrative { get; set; }
 
     [Parameter]
     public EventCallback<string> OnDecision { get; set; }

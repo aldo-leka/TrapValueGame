@@ -6,11 +6,15 @@ def generate_snapshots(
     stock_id: int,
     prices: list[dict],
     min_history_years: int = 5,
-    forward_months: int = 24
+    forward_months: int = 24,
+    min_snapshot_year: int = 2023
 ) -> list[dict]:
     """
     Generate valid snapshot dates for a stock.
     Returns list of snapshot records with computed outcomes.
+
+    min_snapshot_year: Only create snapshots from this year onwards.
+    This ensures we have valid historical financial data (yfinance only provides ~4 years).
     """
     if not prices:
         return []
@@ -24,6 +28,15 @@ def generate_snapshots(
     # Calculate valid snapshot window
     earliest = first_date + timedelta(days=min_history_years * 365)
     latest = last_date - timedelta(days=forward_months * 30)
+
+    # Enforce minimum snapshot year to ensure valid financial data
+    min_date = datetime(min_snapshot_year, 1, 1).date()
+    if isinstance(earliest, datetime):
+        earliest = earliest.date()
+    if isinstance(latest, datetime):
+        latest = latest.date()
+    if earliest < min_date:
+        earliest = min_date
 
     if earliest >= latest:
         return []

@@ -24,6 +24,10 @@ builder.Services.AddScoped<GameService>();
 builder.Services.AddScoped<LocalStorageService>();
 builder.Services.AddScoped<GameStateService>();
 
+// Add AI services (session-scoped for API key isolation)
+builder.Services.AddScoped<ApiKeyService>();
+builder.Services.AddScoped<GeminiService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

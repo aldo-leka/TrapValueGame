@@ -1,4 +1,8 @@
 @inherits LayoutComponentBase
+@using TrapValueGame.Components.Dialogs
+@inject IDialogService DialogService
+@inject TrapValueGame.Services.ApiKeyService ApiKeyService
+@inject TrapValueGame.Services.GameStateService GameStateService
 
 <MudThemeProvider Theme="@_theme" IsDarkMode="true" />
 <MudPopoverProvider />
@@ -10,7 +14,9 @@
         <MudText Typo="Typo.h6" Class="ml-3">Trap Or Value</MudText>
         <MudSpacer />
         <MudIconButton Icon="@Icons.Material.Filled.Leaderboard" Color="Color.Inherit" />
-        <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Inherit" />
+        <MudIconButton Icon="@Icons.Material.Filled.Settings"
+                       Color="@(ApiKeyService.HasApiKey ? Color.Success : Color.Inherit)"
+                       OnClick="OpenSettings" />
     </MudAppBar>
 
     <MudMainContent Class="pt-16 px-4">
@@ -19,6 +25,17 @@
 </MudLayout>
 
 @code {
+    private async Task OpenSettings()
+    {
+        var result = await DialogService.ShowAsync<ApiKeyDialog>("API Key Settings");
+        if (result is not null)
+        {
+            // Refresh game state service to handle API key changes
+            GameStateService.RefreshNarrativeState();
+            StateHasChanged();
+        }
+    }
+
     private MudTheme _theme = new MudTheme
     {
         PaletteDark = new PaletteDark

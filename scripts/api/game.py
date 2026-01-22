@@ -154,20 +154,20 @@ async def reveal_outcome(snapshot_id: int, player_choice: str):
 
 
 async def get_financials_for_snapshot(db, stock_id: int, snapshot_date) -> list[FinancialYear]:
-    """Get up to 5 years of financials for the stock.
+    """Get up to 5 years of financials available at the snapshot date.
 
-    Note: Ideally we'd filter by report_date <= snapshot_date for point-in-time accuracy,
-    but the current data doesn't support this well. For now, just get the most recent 5 years.
+    Only returns financials where report_date <= snapshot_date for point-in-time accuracy.
     """
     query = """
         SELECT fiscal_year, revenue, gross_margin, operating_income,
                ebitda, net_income, free_cash_flow, total_debt, cash_and_equivalents
         FROM financials
         WHERE stock_id = ?
+          AND report_date <= ?
         ORDER BY fiscal_year DESC
         LIMIT 5
     """
-    async with db.execute(query, [stock_id]) as cursor:
+    async with db.execute(query, [stock_id, snapshot_date]) as cursor:
         rows = await cursor.fetchall()
 
     # Return in chronological order (oldest first)

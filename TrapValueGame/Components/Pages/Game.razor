@@ -15,7 +15,9 @@
 
         case Services.GameState.Analyzing:
             <AnalyzingState
-                Snapshot="GameState.CurrentSnapshot"
+                Snapshot="@GameState.CurrentSnapshot"
+                NarrativeState="@GameState.NarrativeState"
+                Narrative="@GameState.GeneratedNarrative"
                 OnDecision="HandleDecision" />
             break;
 

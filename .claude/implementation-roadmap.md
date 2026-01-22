@@ -1189,68 +1189,521 @@ public class GameService
 ### Goals
 - Integrate Gemini via Microsoft.Extensions.AI
 - Create point-in-time aware prompts
-- Generate and cache narratives
+- Generate narratives on-the-fly using user-provided API key
+- Graceful degradation when no API key is configured
+
+### Key Architecture Decision: User-Provided API Key
+
+Users provide their own Gemini API key via a settings dialog. The key is:
+- Stored only in Blazor circuit memory (session-scoped service)
+- Never persisted to database, localStorage, or sessionStorage
+- Automatically cleared when user refreshes or closes the tab
+- Used to generate narratives on-the-fly (not pre-stored)
+
+**Note:** The `narrative` and `narrative_generated_at` columns in the snapshots table are kept for future flexibility but remain unused in this implementation.
 
 ### Tasks
 
-#### 6.1 Gemini Service
+#### 6.1 ApiKeyService - Session-Scoped Key Storage
+**app/Services/ApiKeyService.cs:**
+```csharp
+namespace TrapValueGame.Services;
+
+/// <summary>
+/// Stores the user's Gemini API key for the duration of their session.
+/// Scoped lifetime = circuit-scoped in Blazor Server (cleared on refresh/disconnect).
+/// </summary>
+public class ApiKeyService
+{
+    private string? _apiKey;
+    private bool _isValidated;
+
+    /// <summary>True if an API key has been configured.</summary>
+    public bool HasApiKey => !string.IsNullOrWhiteSpace(_apiKey);
+
+    /// <summary>True if the API key has been validated against Gemini API.</summary>
+    public bool IsValidated => _isValidated;
+
+    public void SetApiKey(string? key)
+    {
+        _apiKey = key?.Trim();
+        _isValidated = false;
+    }
+
+    public string? GetApiKey() => _apiKey;
+
+    public void ClearApiKey()
+    {
+        _apiKey = null;
+        _isValidated = false;
+    }
+
+    public void MarkValidated() => _isValidated = true;
+}
+```
+
+#### 6.2 GeminiService - On-the-Fly Narrative Generation
 **app/Services/GeminiService.cs:**
 ```csharp
 using Microsoft.Extensions.AI;
+using OpenAI;
+
+namespace TrapValueGame.Services;
 
 public class GeminiService
 {
-    private readonly IChatClient _chatClient;
+    private readonly ApiKeyService _apiKeyService;
+    private readonly ILogger<GeminiService> _logger;
 
-    public GeminiService(IChatClient chatClient)
+    // Gemini API endpoint (OpenAI-compatible)
+    private const string GeminiEndpoint = "https://generativelanguage.googleapis.com/v1beta/openai/";
+    private const string ModelId = "gemini-2.0-flash";
+
+    public GeminiService(ApiKeyService apiKeyService, ILogger<GeminiService> logger)
     {
-        _chatClient = chatClient;
+        _apiKeyService = apiKeyService;
+        _logger = logger;
     }
 
-    public async Task<string> GenerateNarrativeAsync(
+    /// <summary>
+    /// Generates a narrative for the given snapshot.
+    /// Returns null if no API key is configured or generation fails.
+    /// </summary>
+    public async Task<string?> GenerateNarrativeAsync(
         string sector,
         DateTime snapshotDate,
-        List<FinancialYear> financials)
+        List<FinancialData> financials,
+        CancellationToken cancellationToken = default)
     {
-        var prompt = BuildPrompt(sector, snapshotDate, financials);
+        var apiKey = _apiKeyService.GetApiKey();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            _logger.LogDebug("No API key configured, skipping narrative generation");
+            return null;
+        }
 
-        var response = await _chatClient.CompleteAsync(prompt);
-        return response.Message.Text ?? "Analysis unavailable.";
+        try
+        {
+            var prompt = BuildPrompt(sector, snapshotDate, financials);
+
+            // Create OpenAI client pointing to Gemini endpoint
+            var client = new OpenAIClient(
+                new System.ClientModel.ApiKeyCredential(apiKey),
+                new OpenAIClientOptions { Endpoint = new Uri(GeminiEndpoint) }
+            );
+
+            var chatClient = client.AsChatClient(ModelId);
+            var response = await chatClient.CompleteAsync(prompt, cancellationToken: cancellationToken);
+
+            _apiKeyService.MarkValidated();
+            return response.Message.Text ?? "Analysis unavailable.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to generate narrative");
+            return null;
+        }
     }
 
-    private string BuildPrompt(string sector, DateTime date, List<FinancialYear> financials)
+    /// <summary>
+    /// Tests if the configured API key is valid.
+    /// </summary>
+    public async Task<(bool Success, string? Error)> TestApiKeyAsync()
+    {
+        var apiKey = _apiKeyService.GetApiKey();
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return (false, "No API key configured");
+
+        try
+        {
+            var client = new OpenAIClient(
+                new System.ClientModel.ApiKeyCredential(apiKey),
+                new OpenAIClientOptions { Endpoint = new Uri(GeminiEndpoint) }
+            );
+
+            var chatClient = client.AsChatClient(ModelId);
+            await chatClient.CompleteAsync("Say 'OK' if you can read this.");
+
+            _apiKeyService.MarkValidated();
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
+    private string BuildPrompt(string sector, DateTime date, List<FinancialData> financials)
     {
         var year = date.Year;
         var month = date.ToString("MMMM");
 
         var financialSummary = string.Join("\n", financials.Select(f =>
-            $"- {f.FiscalYear}: Revenue ${f.Revenue:N1}M, Net Income ${f.NetIncome:N1}M"
+            $"- {f.FiscalYear}: Revenue ${f.Revenue:N1}M, Net Income ${f.NetIncome:N1}M, " +
+            $"FCF ${f.FreeCashFlow:N1}M"
         ));
 
         return $"""
         You are a value investing analyst writing in {month} {year}.
-        You must NOT reference any events after {date:MMMM yyyy}.
+
+        CRITICAL: You must NOT reference any events, news, or developments after {date:MMMM yyyy}.
+        Write as if you are living in {month} {year} - you have no knowledge of the future.
 
         Analyze this {sector} company based on the following financials:
         {financialSummary}
 
         Write a 3-paragraph analysis:
-        1. Current state: Describe the company's situation AT THIS TIME ({month} {year})
-        2. Bull case: What optimists believe could happen
+        1. Current state: Describe the company's financial situation AT THIS TIME ({month} {year})
+        2. Bull case: What optimists believe could happen going forward
         3. Bear case: What pessimists fear could happen
 
         Rules:
-        - Do NOT mention the company name or ticker
+        - Do NOT mention the company name, ticker, or any identifying information
         - Use present tense ("The company is..." not "The company was...")
-        - Be specific about the numbers
+        - Be specific about the numbers you see in the financials
         - Keep it under 200 words total
+        - Focus on the financials provided, not external events
         """;
     }
 }
 ```
 
-#### 6.2 Narrative Generation Endpoint
-#### 6.3 Caching Layer
+#### 6.3 ApiKeyDialog Component
+**app/Components/Dialogs/ApiKeyDialog.razor:**
+```razor
+@inject ApiKeyService ApiKeyService
+@inject GeminiService GeminiService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-2" />
+            Gemini API Key
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Enter your Gemini API key to enable AI-generated market narratives.
+            Your key is stored only in memory and cleared when you refresh or close the page.
+        </MudText>
+
+        <MudTextField @bind-Value="_apiKey"
+                      Label="API Key"
+                      Variant="Variant.Outlined"
+                      InputType="@(_showKey ? InputType.Text : InputType.Password)"
+                      Adornment="Adornment.End"
+                      AdornmentIcon="@(_showKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                      OnAdornmentClick="() => _showKey = !_showKey"
+                      FullWidth="true"
+                      Class="mb-3" />
+
+        @if (!string.IsNullOrEmpty(_testResult))
+        {
+            <MudAlert Severity="@(_testSuccess ? Severity.Success : Severity.Error)" Class="mb-3">
+                @_testResult
+            </MudAlert>
+        }
+
+        <MudLink Href="https://aistudio.google.com/apikey" Target="_blank" Typo="Typo.caption">
+            Get a free API key from Google AI Studio
+        </MudLink>
+    </DialogContent>
+    <DialogActions>
+        @if (ApiKeyService.HasApiKey)
+        {
+            <MudButton OnClick="ClearKey" Color="Color.Error" Variant="Variant.Text">
+                Clear Key
+            </MudButton>
+        }
+        <MudSpacer />
+        <MudButton OnClick="TestConnection" Disabled="@(string.IsNullOrWhiteSpace(_apiKey) || _testing)">
+            @if (_testing)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Test Connection
+        </MudButton>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Save" Disabled="@string.IsNullOrWhiteSpace(_apiKey)">
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private string? _apiKey;
+    private bool _showKey;
+    private bool _testing;
+    private bool _testSuccess;
+    private string? _testResult;
+
+    protected override void OnInitialized()
+    {
+        _apiKey = ApiKeyService.GetApiKey();
+    }
+
+    private async Task TestConnection()
+    {
+        _testing = true;
+        _testResult = null;
+        StateHasChanged();
+
+        ApiKeyService.SetApiKey(_apiKey);
+        var (success, error) = await GeminiService.TestApiKeyAsync();
+
+        _testSuccess = success;
+        _testResult = success ? "Connection successful!" : $"Error: {error}";
+        _testing = false;
+    }
+
+    private void Save()
+    {
+        ApiKeyService.SetApiKey(_apiKey);
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void ClearKey()
+    {
+        ApiKeyService.ClearApiKey();
+        _apiKey = null;
+        _testResult = null;
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}
+```
+
+#### 6.4 NarrativeLoadingState Component
+**app/Components/Game/NarrativeLoadingState.razor:**
+```razor
+<MudPaper Class="pa-4 narrative-loading" Elevation="0">
+    <div class="d-flex align-center mb-3">
+        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-3" />
+        <MudText Typo="Typo.subtitle1">Analyzing market conditions...</MudText>
+    </div>
+
+    <MudSkeleton SkeletonType="SkeletonType.Text" Width="100%" Height="20px" Class="mb-2" />
+    <MudSkeleton SkeletonType="SkeletonType.Text" Width="95%" Height="20px" Class="mb-2" />
+    <MudSkeleton SkeletonType="SkeletonType.Text" Width="88%" Height="20px" Class="mb-4" />
+
+    <MudSkeleton SkeletonType="SkeletonType.Text" Width="100%" Height="20px" Class="mb-2" />
+    <MudSkeleton SkeletonType="SkeletonType.Text" Width="92%" Height="20px" Class="mb-2" />
+    <MudSkeleton SkeletonType="SkeletonType.Text" Width="85%" Height="20px" />
+</MudPaper>
+
+<style>
+    .narrative-loading {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+    }
+</style>
+```
+
+#### 6.5 NarrativePrompt Component (No API Key State)
+**app/Components/Game/NarrativePrompt.razor:**
+```razor
+@inject IDialogService DialogService
+
+<MudPaper Class="pa-4 narrative-prompt" Elevation="0">
+    <div class="d-flex flex-column align-center text-center">
+        <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Large" Color="Color.Secondary" Class="mb-2" />
+        <MudText Typo="Typo.subtitle1" Class="mb-1">AI Analysis Unavailable</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Configure your Gemini API key to enable AI-generated market narratives.
+        </MudText>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="OpenSettings">
+            <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-1" Size="Size.Small" />
+            Configure Settings
+        </MudButton>
+    </div>
+</MudPaper>
+
+@code {
+    private async Task OpenSettings()
+    {
+        await DialogService.ShowAsync<ApiKeyDialog>("API Key Settings");
+    }
+}
+
+<style>
+    .narrative-prompt {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px dashed rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+    }
+</style>
+```
+
+#### 6.6 Integration - MainLayout Settings Button
+**Modify app/Components/Layout/MainLayout.razor:**
+```razor
+@inject IDialogService DialogService
+@inject ApiKeyService ApiKeyService
+
+@* In the AppBar section, update the Settings button: *@
+<MudIconButton Icon="@Icons.Material.Filled.Settings"
+               Color="@(ApiKeyService.HasApiKey ? Color.Success : Color.Inherit)"
+               OnClick="OpenSettings" />
+
+@code {
+    private async Task OpenSettings()
+    {
+        var result = await DialogService.ShowAsync<ApiKeyDialog>("API Key Settings");
+        if (result != null)
+        {
+            StateHasChanged(); // Refresh to update settings icon color
+        }
+    }
+}
+```
+
+#### 6.7 Integration - AnalyzingState Narrative Handling
+**Modify app/Components/Game/AnalyzingState.razor:**
+```razor
+@* Replace the existing narrative section with: *@
+
+@* Narrative Section *@
+@switch (NarrativeState)
+{
+    case NarrativeDisplayState.Loading:
+        <NarrativeLoadingState />
+        break;
+
+    case NarrativeDisplayState.Ready:
+        <NarrativePanel Narrative="@Narrative" TypeSpeed="12" />
+        break;
+
+    case NarrativeDisplayState.NoApiKey:
+        <NarrativePrompt />
+        break;
+
+    case NarrativeDisplayState.Error:
+        <MudAlert Severity="Severity.Warning" Class="mb-4">
+            Unable to generate AI analysis. You can still make your decision based on the financials.
+        </MudAlert>
+        break;
+}
+
+@code {
+    [Parameter] public NarrativeDisplayState NarrativeState { get; set; }
+    [Parameter] public string? Narrative { get; set; }
+}
+
+// Add to Models folder:
+public enum NarrativeDisplayState
+{
+    NoApiKey,
+    Loading,
+    Ready,
+    Error
+}
+```
+
+#### 6.8 Integration - GameStateService Orchestration
+**Modify app/Services/GameStateService.cs:**
+```csharp
+// Add these properties and methods:
+
+public NarrativeDisplayState NarrativeState { get; private set; } = NarrativeDisplayState.NoApiKey;
+public string? GeneratedNarrative { get; private set; }
+
+private readonly GeminiService _geminiService;
+private readonly ApiKeyService _apiKeyService;
+
+// In LoadNextSnapshotAsync, after fetching snapshot:
+public async Task LoadNextSnapshotAsync()
+{
+    CurrentState = GameState.Loading;
+    NotifyStateChanged();
+
+    CurrentSnapshot = await _gameService.GetNextSnapshotAsync(excludeIds: _playedSnapshotIds.ToArray());
+
+    // Start narrative generation (non-blocking)
+    _ = GenerateNarrativeAsync();
+
+    CurrentState = GameState.Analyzing;
+    NotifyStateChanged();
+}
+
+private async Task GenerateNarrativeAsync()
+{
+    if (!_apiKeyService.HasApiKey)
+    {
+        NarrativeState = NarrativeDisplayState.NoApiKey;
+        NotifyStateChanged();
+        return;
+    }
+
+    NarrativeState = NarrativeDisplayState.Loading;
+    NotifyStateChanged();
+
+    var narrative = await _geminiService.GenerateNarrativeAsync(
+        CurrentSnapshot!.Sector,
+        CurrentSnapshot.SnapshotDate,
+        CurrentSnapshot.Financials.Select(f => new FinancialData
+        {
+            FiscalYear = f.FiscalYear,
+            Revenue = f.Revenue,
+            NetIncome = f.NetIncome,
+            FreeCashFlow = f.FreeCashFlow
+        }).ToList()
+    );
+
+    if (!string.IsNullOrEmpty(narrative))
+    {
+        GeneratedNarrative = narrative;
+        NarrativeState = NarrativeDisplayState.Ready;
+    }
+    else
+    {
+        NarrativeState = NarrativeDisplayState.Error;
+    }
+
+    NotifyStateChanged();
+}
+```
+
+#### 6.9 Program.cs Service Registration
+**Modify app/Program.cs:**
+```csharp
+// Add service registrations:
+builder.Services.AddScoped<ApiKeyService>();
+builder.Services.AddScoped<GeminiService>();
+
+// Remove any server-side GEMINI_API_KEY configuration
+// (API key now comes from user)
+```
+
+### Security Considerations
+
+1. **Circuit Isolation**: Each Blazor circuit has its own `ApiKeyService` instance. User A's key cannot leak to User B.
+
+2. **No Persistence**: Key is stored only in server memory. Never written to:
+   - Database
+   - localStorage/sessionStorage
+   - Cookies
+   - Server logs
+
+3. **Auto-Clear**: When the SignalR circuit ends (refresh, close tab, disconnect), the scoped service is disposed and the key is garbage collected.
+
+4. **Server-Side Only**: The API key never leaves the Blazor server. Browser JavaScript cannot access it.
+
+5. **No Logging**: Ensure `_logger` calls never include the API key value.
+
+### Verification
+- [ ] API key entry works via Settings dialog
+- [ ] Settings icon turns green when API key is configured
+- [ ] Key is cleared on page refresh (verify by reopening settings)
+- [ ] Narrative generates and displays with typewriter effect when key configured
+- [ ] Game works without API key (shows "Configure Settings" prompt)
+- [ ] "Test Connection" validates key against Gemini API
+- [ ] Point-in-time integrity: Generated narratives don't reference future events
+- [ ] Error handling: Invalid key shows error, network issues handled gracefully
+- [ ] Financials display immediately while narrative loads in background
 
 ---
 
