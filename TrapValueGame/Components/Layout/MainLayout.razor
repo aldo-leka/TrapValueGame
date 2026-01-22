@@ -1,23 +1,54 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu/>
-    </div>
+<MudThemeProvider Theme="@_theme" IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-        </div>
+<MudLayout>
+    <MudAppBar Elevation="0" Dense="true" Color="Color.Transparent">
+        <MudText Typo="Typo.h6" Class="ml-3">Trap Or Value</MudText>
+        <MudSpacer />
+        <MudIconButton Icon="@Icons.Material.Filled.Leaderboard" Color="Color.Inherit" />
+        <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Inherit" />
+    </MudAppBar>
 
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
-</div>
+    <MudMainContent Class="pt-16 px-4">
+        @Body
+    </MudMainContent>
+</MudLayout>
 
-<div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
-</div>
+@code {
+    private MudTheme _theme = new MudTheme
+    {
+        PaletteDark = new PaletteDark
+        {
+            Black = "#0D1117",
+            Background = "#0D1117",
+            BackgroundGray = "#161B22",
+            Surface = "#161B22",
+            DrawerBackground = "#161B22",
+            DrawerText = "rgba(255,255,255, 0.70)",
+            AppbarBackground = "#161B22",
+            AppbarText = "rgba(255,255,255, 0.70)",
+            TextPrimary = "#E6EDF3",
+            TextSecondary = "#8B949E",
+            ActionDefault = "#8B949E",
+            ActionDisabled = "rgba(255,255,255, 0.26)",
+            ActionDisabledBackground = "rgba(255,255,255, 0.12)",
+            Success = "#3FB950",
+            Error = "#F85149",
+            Warning = "#D29922",
+            Info = "#58A6FF",
+            Primary = "#58A6FF",
+            Secondary = "#8B949E"
+        },
+        Typography = new Typography
+        {
+            Default = new DefaultTypography
+            {
+                FontFamily = new[] { "Inter", "-apple-system", "sans-serif" }
+            }
+        }
+    };
+}

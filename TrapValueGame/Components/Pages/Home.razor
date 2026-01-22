@@ -1,7 +1,16 @@
-﻿@page "/"
+@page "/"
+@page "/game"
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Trap Or Value</PageTitle>
 
-<h1>Hello, world!</h1>
-
-Welcome to your new app.
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8">
+    <MudPaper Class="pa-8" Elevation="0" Style="background: transparent; text-align: center;">
+        <MudText Typo="Typo.h3" Class="mb-4" Color="Color.Primary">Trap Or Value?</MudText>
+        <MudText Typo="Typo.body1" Class="mb-6" Color="Color.Secondary">
+            Analyze historical stock data. Make your call. See what happened next.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large">
+            Start Playing
+        </MudButton>
+    </MudPaper>
+</MudContainer>

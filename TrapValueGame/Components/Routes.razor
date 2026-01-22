@@ -1,6 +1,18 @@
-﻿<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+<Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
         <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)"/>
         <FocusOnNavigate RouteData="routeData" Selector="h1"/>
     </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(Layout.MainLayout)">
+            <MudContainer MaxWidth="MaxWidth.Small" Class="mt-16">
+                <MudText Typo="Typo.h4" Align="Align.Center" Color="Color.Error">
+                    Page Not Found
+                </MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center" Class="mt-4">
+                    The page you're looking for doesn't exist.
+                </MudText>
+            </MudContainer>
+        </LayoutView>
+    </NotFound>
 </Router>

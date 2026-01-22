@@ -1,0 +1,28 @@
+services:
+  app:
+    build:
+      context: ./TrapValueGame
+      dockerfile: Dockerfile
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - PythonApiUrl=http://api:8000
+      - DatabasePath=/shared/stocks.db
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - ./shared:/shared
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_PATH=/shared/stocks.db
+      - CACHE_DIR=/shared/cache
+    volumes:
+      - ./shared:/shared
