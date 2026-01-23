@@ -1,29 +1,200 @@
 @namespace TrapValueGame.Components.Game
 
-<MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="min-vh-50 py-16">
-    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-    <MudText Typo="Typo.h6" Class="mt-4" Color="Color.Secondary">
-        Finding your next case...
+<MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="loading-container min-vh-50 py-16">
+    <div class="loading-icon-container">
+        <div class="loading-ring"></div>
+        <MudIcon Icon="@Icons.Material.Filled.TrendingUp"
+                 Size="Size.Large"
+                 Color="Color.Primary"
+                 Class="loading-icon" />
+    </div>
+
+    <MudText Typo="Typo.h6" Class="mt-4 loading-text" Color="Color.Secondary">
+        @_loadingMessages[_currentMessageIndex]
     </MudText>
 
     @* Skeleton preview of what's coming *@
-    <MudPaper Class="mt-8 pa-4" Style="width: 100%; max-width: 600px;" Elevation="0">
-        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="24px" Width="60%" Class="mb-4" />
-        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="16px" Width="40%" Class="mb-6" />
+    <MudPaper Class="mt-8 pa-4 skeleton-container" Style="width: 100%; max-width: 600px;" Elevation="0">
+        @* Company header skeleton *@
+        <div class="skeleton-row">
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="24px" Width="60%" Class="mb-2" Animation="Animation.Wave" />
+        </div>
+        <div class="skeleton-row" style="--delay: 0.1s;">
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="16px" Width="40%" Class="mb-6" Animation="Animation.Wave" />
+        </div>
 
         @* Financial table skeleton *@
-        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="200px" Class="mb-4" />
+        <div class="skeleton-row" style="--delay: 0.2s;">
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="180px" Class="mb-4" Animation="Animation.Wave" />
+        </div>
+
+        @* Narrative skeleton *@
+        <div class="skeleton-row" style="--delay: 0.3s;">
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="16px" Width="100%" Class="mb-2" Animation="Animation.Wave" />
+        </div>
+        <div class="skeleton-row" style="--delay: 0.35s;">
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="16px" Width="90%" Class="mb-2" Animation="Animation.Wave" />
+        </div>
+        <div class="skeleton-row" style="--delay: 0.4s;">
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="16px" Width="75%" Class="mb-4" Animation="Animation.Wave" />
+        </div>
 
         @* Action buttons skeleton *@
         <MudStack Row="true" Justify="Justify.SpaceAround" Class="mt-4">
-            <MudSkeleton SkeletonType="SkeletonType.Circle" Width="80px" Height="80px" />
-            <MudSkeleton SkeletonType="SkeletonType.Circle" Width="80px" Height="80px" />
+            <div class="skeleton-row" style="--delay: 0.5s;">
+                <MudSkeleton SkeletonType="SkeletonType.Circle" Width="80px" Height="80px" Animation="Animation.Wave" />
+            </div>
+            <div class="skeleton-row" style="--delay: 0.55s;">
+                <MudSkeleton SkeletonType="SkeletonType.Circle" Width="80px" Height="80px" Animation="Animation.Wave" />
+            </div>
         </MudStack>
     </MudPaper>
 </MudStack>
 
+@code {
+    private readonly string[] _loadingMessages = new[]
+    {
+        "Finding your next case...",
+        "Analyzing market data...",
+        "Preparing financials...",
+        "Loading historical data..."
+    };
+
+    private int _currentMessageIndex = 0;
+    private System.Threading.Timer? _messageTimer;
+
+    protected override void OnInitialized()
+    {
+        _messageTimer = new System.Threading.Timer(async _ =>
+        {
+            _currentMessageIndex = (_currentMessageIndex + 1) % _loadingMessages.Length;
+            await InvokeAsync(StateHasChanged);
+        }, null, 2000, 2000);
+    }
+
+    public void Dispose()
+    {
+        _messageTimer?.Dispose();
+    }
+}
+
 <style>
+    .loading-container {
+        animation: fadeIn 0.3s ease-out;
+    }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
     .min-vh-50 {
         min-height: 50vh;
+    }
+
+    .loading-icon-container {
+        position: relative;
+        width: 80px;
+        height: 80px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .loading-ring {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border: 3px solid transparent;
+        border-top-color: var(--mud-palette-primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    .loading-ring::before {
+        content: '';
+        position: absolute;
+        top: 5px;
+        left: 5px;
+        right: 5px;
+        bottom: 5px;
+        border: 3px solid transparent;
+        border-top-color: var(--mud-palette-primary-lighten);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite reverse;
+    }
+
+    @@keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .loading-icon {
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    @@keyframes pulse {
+        0%, 100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+        50% {
+            transform: scale(1.1);
+            opacity: 0.8;
+        }
+    }
+
+    .loading-text {
+        animation: textFade 2s ease-in-out infinite;
+    }
+
+    @@keyframes textFade {
+        0%, 100% {
+            opacity: 0.6;
+        }
+        50% {
+            opacity: 1;
+        }
+    }
+
+    .skeleton-container {
+        background: var(--mud-palette-background-gray);
+        border-radius: 12px;
+    }
+
+    .skeleton-row {
+        animation: skeletonSlide 0.5s ease-out both;
+        animation-delay: var(--delay, 0s);
+    }
+
+    @@keyframes skeletonSlide {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .loading-ring,
+        .loading-ring::before,
+        .loading-icon,
+        .loading-text,
+        .loading-container,
+        .skeleton-row {
+            animation: none !important;
+        }
+
+        .loading-ring {
+            border-color: var(--mud-palette-primary);
+        }
     }
 </style>

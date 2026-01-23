@@ -1,0 +1,152 @@
+@namespace TrapValueGame.Components.Dialogs
+@inject TrapValueGame.Services.GameStateService GameStateService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Leaderboard" Class="mr-2" />
+            Your Stats
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="4">
+            @* Session Stats *@
+            <MudPaper Class="pa-4" Elevation="0">
+                <MudText Typo="Typo.overline" Color="Color.Secondary" Class="mb-3">This Session</MudText>
+                <MudStack Row="true" Justify="Justify.SpaceAround">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.h3">@GameStateService.TotalPlayed</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Played</MudText>
+                    </MudStack>
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.h3" Color="Color.Success">@GameStateService.CorrectGuesses</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Correct</MudText>
+                    </MudStack>
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.h3">@GetAccuracyDisplay()</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Accuracy</MudText>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+
+            @* Accuracy Gauge *@
+            @if (GameStateService.TotalPlayed > 0)
+            {
+                <MudPaper Class="pa-4" Elevation="0">
+                    <MudProgressLinear Color="@GetAccuracyColor()"
+                                       Value="@GameStateService.GetAccuracy()"
+                                       Class="my-2"
+                                       Rounded="true"
+                                       Size="Size.Large" />
+                    <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
+                        @GetAccuracyMessage()
+                    </MudText>
+                </MudPaper>
+            }
+
+            @* All-Time Stats *@
+            <MudPaper Class="pa-4" Elevation="0">
+                <MudText Typo="Typo.overline" Color="Color.Secondary" Class="mb-3">All Time</MudText>
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudStack>
+                        <MudText Typo="Typo.h4">@GameStateService.TotalHistoricalPlays</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Unique Snapshots Played</MudText>
+                    </MudStack>
+                    @if (GameStateService.TotalHistoricalPlays > 0)
+                    {
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Error"
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.RestartAlt"
+                                   OnClick="ResetHistory">
+                            Reset History
+                        </MudButton>
+                    }
+                </MudStack>
+            </MudPaper>
+
+            @if (_showResetConfirm)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-2">
+                    <MudText Typo="Typo.body2" Class="mb-2">
+                        This will clear your played history, allowing you to replay all snapshots. Continue?
+                    </MudText>
+                    <MudStack Row="true" Spacing="2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" OnClick="ConfirmReset">
+                            Yes, Reset
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="CancelReset">
+                            Cancel
+                        </MudButton>
+                    </MudStack>
+                </MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close" Color="Color.Primary">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private bool _showResetConfirm;
+
+    private string GetAccuracyDisplay()
+    {
+        if (GameStateService.TotalPlayed == 0)
+            return "-";
+        return $"{GameStateService.GetAccuracy():N0}%";
+    }
+
+    private Color GetAccuracyColor()
+    {
+        var accuracy = GameStateService.GetAccuracy();
+        return accuracy switch
+        {
+            >= 70 => Color.Success,
+            >= 50 => Color.Warning,
+            _ => Color.Error
+        };
+    }
+
+    private string GetAccuracyMessage()
+    {
+        var accuracy = GameStateService.GetAccuracy();
+        var played = GameStateService.TotalPlayed;
+
+        if (played < 5)
+            return "Play more to see your true accuracy!";
+
+        return accuracy switch
+        {
+            >= 80 => "Outstanding! You have a keen eye for value.",
+            >= 70 => "Great work! You're beating the market.",
+            >= 60 => "Good progress! Keep honing your skills.",
+            >= 50 => "You're right more than you're wrong!",
+            >= 40 => "Keep practicing, you're learning!",
+            _ => "Value investing is hard. Keep at it!"
+        };
+    }
+
+    private void ResetHistory()
+    {
+        _showResetConfirm = true;
+    }
+
+    private async Task ConfirmReset()
+    {
+        await GameStateService.ResetHistoryAsync();
+        _showResetConfirm = false;
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void CancelReset()
+    {
+        _showResetConfirm = false;
+    }
+
+    private void Close() => MudDialog.Close(DialogResult.Ok(false));
+}

@@ -1,25 +1,30 @@
 @namespace TrapValueGame.Components.Game
 @using TrapValueGame.Models
 @using System.Globalization
+@implements IDisposable
 
-<MudStack Spacing="4">
+<MudStack Spacing="4" Class="result-container">
     @* Result Header *@
-    <MudPaper Class="pa-6 text-center" Elevation="0">
+    <MudPaper Class="@($"pa-6 text-center reveal-item {(_visibleItems >= 1 ? "visible" : "")}")" Elevation="0" Style="--delay: 0ms;">
         @if (Reveal?.IsCorrect == true)
         {
-            <MudIcon Icon="@Icons.Material.Filled.CheckCircle"
-                     Color="Color.Success"
-                     Size="Size.Large"
-                     Class="mb-2" />
-            <MudText Typo="Typo.h4" Color="Color.Success">Correct!</MudText>
+            <div class="result-icon success-icon @(_visibleItems >= 1 ? "animate" : "")">
+                <MudIcon Icon="@Icons.Material.Filled.CheckCircle"
+                         Color="Color.Success"
+                         Size="Size.Large"
+                         Class="mb-2" />
+            </div>
+            <MudText Typo="Typo.h4" Color="Color.Success" Class="result-text">Correct!</MudText>
         }
         else
         {
-            <MudIcon Icon="@Icons.Material.Filled.Cancel"
-                     Color="Color.Error"
-                     Size="Size.Large"
-                     Class="mb-2" />
-            <MudText Typo="Typo.h4" Color="Color.Error">Wrong!</MudText>
+            <div class="result-icon error-icon @(_visibleItems >= 1 ? "animate" : "")">
+                <MudIcon Icon="@Icons.Material.Filled.Cancel"
+                         Color="Color.Error"
+                         Size="Size.Large"
+                         Class="mb-2" />
+            </div>
+            <MudText Typo="Typo.h4" Color="Color.Error" Class="result-text">Wrong!</MudText>
         }
 
         <MudText Typo="Typo.body1" Class="mt-2">
@@ -29,15 +34,15 @@
     </MudPaper>
 
     @* Company Reveal *@
-    <MudPaper Class="pa-4" Elevation="0">
+    <MudPaper Class="@($"pa-4 reveal-item {(_visibleItems >= 2 ? "visible" : "")}")" Elevation="0" Style="--delay: 150ms;">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
             <MudStack Spacing="1">
                 <MudText Typo="Typo.overline" Color="Color.Secondary">The Company Was</MudText>
-                <MudText Typo="Typo.h4">@Reveal?.CompanyName</MudText>
-                <MudChip T="string" Size="Size.Small" Color="Color.Primary">@Reveal?.Ticker</MudChip>
+                <MudText Typo="Typo.h4" Class="company-name">@Reveal?.CompanyName</MudText>
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="ticker-chip">@Reveal?.Ticker</MudChip>
             </MudStack>
             <MudStack AlignItems="AlignItems.End">
-                <MudText Typo="Typo.h3" Class="@GetReturnClass()">
+                <MudText Typo="Typo.h3" Class="@($"{GetReturnClass()} return-value {(_visibleItems >= 2 ? "count-up" : "")}")">
                     @FormatReturn(Reveal?.Return24Mo)
                 </MudText>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
@@ -48,10 +53,10 @@
     </MudPaper>
 
     @* Price Journey *@
-    <MudPaper Class="pa-4" Elevation="0">
+    <MudPaper Class="@($"pa-4 reveal-item {(_visibleItems >= 3 ? "visible" : "")}")" Elevation="0" Style="--delay: 300ms;">
         <MudText Typo="Typo.h6" Class="mb-3">Price Journey</MudText>
         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.End">
-            <MudStack AlignItems="AlignItems.Center">
+            <MudStack AlignItems="AlignItems.Center" Class="price-point start-price">
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
                     @Reveal?.SnapshotDate.ToString("MMM yyyy")
                 </MudText>
@@ -61,11 +66,13 @@
                 <MudText Typo="Typo.caption" Color="Color.Secondary">Starting Price</MudText>
             </MudStack>
 
-            <MudIcon Icon="@Icons.Material.Filled.TrendingFlat"
-                     Color="Color.Secondary"
-                     Size="Size.Large" />
+            <div class="journey-arrow @(_visibleItems >= 3 ? "animate" : "")">
+                <MudIcon Icon="@(Reveal?.Return24Mo >= 0 ? Icons.Material.Filled.TrendingUp : Icons.Material.Filled.TrendingDown)"
+                         Color="@(Reveal?.Return24Mo >= 0 ? Color.Success : Color.Error)"
+                         Size="Size.Large" />
+            </div>
 
-            <MudStack AlignItems="AlignItems.Center">
+            <MudStack AlignItems="AlignItems.Center" Class="price-point end-price">
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
                     @Reveal?.SnapshotDate.AddMonths(24).ToString("MMM yyyy")
                 </MudText>
@@ -80,27 +87,29 @@
         @if (Reveal?.PriceSeries != null && Reveal.PriceSeries.Count > 0)
         {
             <MudDivider Class="my-4" />
-            <PriceChart
-                Data="@Reveal.PriceSeries"
-                StartPrice="@Reveal.PriceAtSnapshot"
-                EndPrice="@Reveal.PriceAt24Mo"
-                Animate="true" />
+            <div class="chart-container @(_visibleItems >= 4 ? "visible" : "")">
+                <PriceChart
+                    Data="@Reveal.PriceSeries"
+                    StartPrice="@Reveal.PriceAtSnapshot"
+                    EndPrice="@Reveal.PriceAt24Mo"
+                    Animate="@(_visibleItems >= 4)" />
+            </div>
         }
     </MudPaper>
 
     @* Session Stats *@
-    <MudPaper Class="pa-4" Elevation="0">
+    <MudPaper Class="@($"pa-4 reveal-item {(_visibleItems >= 5 ? "visible" : "")}")" Elevation="0" Style="--delay: 600ms;">
         <MudStack Row="true" Justify="Justify.SpaceAround">
-            <MudStack AlignItems="AlignItems.Center">
-                <MudText Typo="Typo.h4">@TotalPlayed</MudText>
+            <MudStack AlignItems="AlignItems.Center" Class="stat-item">
+                <MudText Typo="Typo.h4" Class="stat-number">@TotalPlayed</MudText>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">This Session</MudText>
             </MudStack>
-            <MudStack AlignItems="AlignItems.Center">
-                <MudText Typo="Typo.h4" Color="Color.Success">@CorrectGuesses</MudText>
+            <MudStack AlignItems="AlignItems.Center" Class="stat-item">
+                <MudText Typo="Typo.h4" Color="Color.Success" Class="stat-number">@CorrectGuesses</MudText>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">Correct</MudText>
             </MudStack>
-            <MudStack AlignItems="AlignItems.Center">
-                <MudText Typo="Typo.h4">@GetAccuracy()%</MudText>
+            <MudStack AlignItems="AlignItems.Center" Class="stat-item">
+                <MudText Typo="Typo.h4" Class="stat-number">@GetAccuracy()%</MudText>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">Accuracy</MudText>
             </MudStack>
         </MudStack>
@@ -132,7 +141,8 @@
         FullWidth="true"
         StartIcon="@Icons.Material.Filled.Replay"
         OnClick="@(() => OnPlayAgain.InvokeAsync())"
-        Class="mt-4">
+        Class="@($"mt-4 reveal-item play-again-btn {(_visibleItems >= 6 ? "visible" : "")}")"
+        Style="--delay: 800ms;">
         Play Again
     </MudButton>
 </MudStack>
@@ -155,6 +165,46 @@
 
     [Parameter]
     public EventCallback OnResetHistory { get; set; }
+
+    private int _visibleItems = 0;
+    private CancellationTokenSource? _animationCts;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Reset and restart animation when reveal data changes
+        if (Reveal != null)
+        {
+            await StartRevealAnimation();
+        }
+    }
+
+    private async Task StartRevealAnimation()
+    {
+        // Cancel any existing animation
+        _animationCts?.Cancel();
+        _animationCts = new CancellationTokenSource();
+        var token = _animationCts.Token;
+
+        _visibleItems = 0;
+        StateHasChanged();
+
+        try
+        {
+            // Stagger the reveal of each section
+            var delays = new[] { 50, 200, 350, 500, 700, 900 };
+
+            for (var i = 0; i < delays.Length; i++)
+            {
+                await Task.Delay(delays[i] - (i > 0 ? delays[i - 1] : 0), token);
+                _visibleItems = i + 1;
+                StateHasChanged();
+            }
+        }
+        catch (TaskCanceledException)
+        {
+            // Animation was cancelled
+        }
+    }
 
     private string FormatPrice(decimal? value)
     {
@@ -181,5 +231,202 @@
         if (TotalPlayed == 0) return "0";
         return ((double)CorrectGuesses / TotalPlayed * 100).ToString("N0", CultureInfo.InvariantCulture);
     }
+
+    public void Dispose()
+    {
+        _animationCts?.Cancel();
+        _animationCts?.Dispose();
+    }
 }
+
+<style>
+    .result-container {
+        overflow: hidden;
+    }
+
+    .reveal-item {
+        opacity: 0;
+        transform: translateY(20px);
+        transition: opacity 0.4s ease-out, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .reveal-item.visible {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    /* Result icon animations */
+    .result-icon {
+        display: inline-block;
+    }
+
+    .result-icon.animate {
+        animation: iconPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .success-icon.animate {
+        animation: iconPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), successPulse 0.3s ease-out 0.3s;
+    }
+
+    .error-icon.animate {
+        animation: iconPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), errorShake 0.4s ease-out 0.3s;
+    }
+
+    @@keyframes iconPop {
+        0% {
+            transform: scale(0);
+            opacity: 0;
+        }
+        50% {
+            transform: scale(1.2);
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    @@keyframes successPulse {
+        0%, 100% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.1);
+        }
+    }
+
+    @@keyframes errorShake {
+        0%, 100% {
+            transform: translateX(0);
+        }
+        20%, 60% {
+            transform: translateX(-5px);
+        }
+        40%, 80% {
+            transform: translateX(5px);
+        }
+    }
+
+    /* Company name reveal */
+    .company-name {
+        overflow: hidden;
+    }
+
+    .ticker-chip {
+        animation: chipSlide 0.3s ease-out 0.1s both;
+    }
+
+    @@keyframes chipSlide {
+        from {
+            opacity: 0;
+            transform: translateX(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    /* Return value animation */
+    .return-value.count-up {
+        animation: countUpPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @@keyframes countUpPop {
+        0% {
+            transform: scale(0.8);
+            opacity: 0;
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    /* Journey arrow animation */
+    .journey-arrow {
+        opacity: 0;
+        transform: scale(0.5);
+        transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .journey-arrow.animate {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    /* Price points */
+    .price-point {
+        transition: opacity 0.3s ease;
+    }
+
+    /* Chart container */
+    .chart-container {
+        opacity: 0;
+        transform: translateY(10px);
+        transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+    }
+
+    .chart-container.visible {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    /* Stat items */
+    .stat-item .stat-number {
+        transition: transform 0.3s ease;
+    }
+
+    .reveal-item.visible .stat-number {
+        animation: statPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @@keyframes statPop {
+        0% {
+            transform: scale(0.5);
+            opacity: 0;
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    /* Play again button */
+    .play-again-btn.visible {
+        animation: buttonSlideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @@keyframes buttonSlideUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .reveal-item,
+        .result-icon,
+        .journey-arrow,
+        .chart-container,
+        .ticker-chip,
+        .return-value,
+        .stat-number,
+        .play-again-btn {
+            animation: none !important;
+            transition: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+        }
+
+        .reveal-item {
+            opacity: 1;
+            transform: none;
+        }
+    }
+</style>
 

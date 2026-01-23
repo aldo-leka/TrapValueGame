@@ -1,19 +1,46 @@
+import asyncio
 from fastapi import APIRouter, BackgroundTasks
 from models.schemas import SeedRequest, SeedResult
 from services.extractor import YFinanceExtractor
 from services.snapshot_generator import generate_snapshots
 from services.fake_names import generate_fake_name
+from services.stock_list import fetch_sp500_tickers, FALLBACK_SP500_SAMPLE
 from services.database import get_db
 from datetime import datetime
 
 router = APIRouter()
 
+# Progress tracking for long-running seed jobs
+_seed_progress = {
+    "status": "idle",
+    "total": 0,
+    "processed": 0,
+    "successful": 0,
+    "failed": 0,
+    "current_ticker": None,
+    "started_at": None,
+    "errors": []
+}
+
 
 @router.post("/seed")
 async def seed_database(request: SeedRequest, background_tasks: BackgroundTasks):
     """Seed database with stock data. Runs in background."""
-    background_tasks.add_task(seed_tickers, request.tickers, request.force_refresh)
+    background_tasks.add_task(seed_tickers_with_rate_limit, request.tickers, request.force_refresh)
     return {"message": f"Seeding {len(request.tickers)} tickers in background"}
+
+
+@router.post("/seed-sp500")
+async def seed_sp500(background_tasks: BackgroundTasks, force_refresh: bool = False):
+    """Seed all S&P 500 companies. Runs in background with rate limiting."""
+    try:
+        tickers = fetch_sp500_tickers()
+    except Exception as e:
+        print(f"Failed to fetch S&P 500 list: {e}, using fallback")
+        tickers = FALLBACK_SP500_SAMPLE
+
+    background_tasks.add_task(seed_tickers_with_rate_limit, tickers, force_refresh)
+    return {"message": f"Seeding {len(tickers)} S&P 500 tickers in background"}
 
 
 @router.get("/status")
@@ -36,8 +63,33 @@ async def get_seed_status():
         await db.close()
 
 
-async def seed_tickers(tickers: list[str], force_refresh: bool):
-    """Background task to seed ticker data."""
+@router.get("/seed-progress")
+async def get_seed_progress():
+    """Get progress of current seeding job."""
+    return _seed_progress
+
+
+async def seed_tickers_with_rate_limit(
+    tickers: list[str],
+    force_refresh: bool,
+    delay_seconds: float = 2.0,
+    batch_size: int = 10
+):
+    """Background task to seed ticker data with rate limiting and batch commits."""
+    global _seed_progress
+
+    # Reset progress
+    _seed_progress = {
+        "status": "running",
+        "total": len(tickers),
+        "processed": 0,
+        "successful": 0,
+        "failed": 0,
+        "current_ticker": None,
+        "started_at": datetime.now().isoformat(),
+        "errors": []
+    }
+
     extractor = YFinanceExtractor()
     db = await get_db()
 
@@ -46,29 +98,65 @@ async def seed_tickers(tickers: list[str], force_refresh: bool):
         async with db.execute("SELECT fake_name FROM stocks") as cursor:
             used_names = {row[0] for row in await cursor.fetchall()}
 
-        results = []
+        for i, ticker in enumerate(tickers):
+            _seed_progress["current_ticker"] = ticker
 
-        for ticker in tickers:
             try:
                 result = await seed_single_ticker(
                     db, extractor, ticker, used_names, force_refresh
                 )
-                results.append(result)
+
                 if result["success"]:
+                    _seed_progress["successful"] += 1
                     used_names.add(result.get("fake_name", ""))
-                print(f"Seeded {ticker}: {result}")
+                else:
+                    _seed_progress["failed"] += 1
+                    if result.get("error"):
+                        _seed_progress["errors"].append({
+                            "ticker": ticker,
+                            "error": result["error"]
+                        })
+
+                print(f"[{i+1}/{len(tickers)}] {ticker}: {result}")
+
             except Exception as e:
-                results.append({
+                _seed_progress["failed"] += 1
+                _seed_progress["errors"].append({
                     "ticker": ticker,
-                    "success": False,
-                    "snapshots_created": 0,
                     "error": str(e)
                 })
-                print(f"Error seeding {ticker}: {e}")
+                print(f"[{i+1}/{len(tickers)}] Error seeding {ticker}: {e}")
 
-        return results
+            _seed_progress["processed"] += 1
+
+            # Batch commit every N stocks
+            if (i + 1) % batch_size == 0:
+                await db.commit()
+                print(f"Committed batch at {i + 1} stocks")
+
+            # Rate limiting delay (skip for last ticker)
+            if i < len(tickers) - 1:
+                await asyncio.sleep(delay_seconds)
+
+        # Final commit
+        await db.commit()
+
+        _seed_progress["status"] = "completed"
+        _seed_progress["current_ticker"] = None
+        print(f"Seeding completed: {_seed_progress['successful']} successful, {_seed_progress['failed']} failed")
+
+    except Exception as e:
+        _seed_progress["status"] = "error"
+        _seed_progress["errors"].append({"ticker": "GLOBAL", "error": str(e)})
+        print(f"Seeding failed with error: {e}")
     finally:
         await db.close()
+
+
+# Keep original function for backwards compatibility
+async def seed_tickers(tickers: list[str], force_refresh: bool):
+    """Legacy seeding without rate limiting. Use seed_tickers_with_rate_limit for bulk."""
+    await seed_tickers_with_rate_limit(tickers, force_refresh, delay_seconds=0.5, batch_size=5)
 
 
 async def seed_single_ticker(db, extractor, ticker: str, used_names: set, force: bool) -> dict:
@@ -166,8 +254,6 @@ async def seed_single_ticker(db, extractor, ticker: str, used_names: set, force:
             s.get("return_6mo"), s.get("return_12mo"), s["return_24mo"],
             s["outcome_label"], s["difficulty"]
         ])
-
-    await db.commit()
 
     # Count playable snapshots (value or trap only)
     playable = len([s for s in snapshots if s["outcome_label"] in ("value", "trap")])

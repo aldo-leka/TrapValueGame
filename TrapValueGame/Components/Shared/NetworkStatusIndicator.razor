@@ -1,0 +1,163 @@
+@namespace TrapValueGame.Components.Shared
+@inject Services.NetworkStatusService NetworkStatus
+@implements IDisposable
+
+@if (!NetworkStatus.IsOnline || !NetworkStatus.IsApiHealthy)
+{
+    <div class="network-indicator @GetStatusClass() @(_isVisible ? "visible" : "")">
+        <div class="indicator-content">
+            <MudIcon Icon="@GetIcon()" Size="Size.Small" Class="indicator-icon" />
+            <span class="indicator-text">@GetMessage()</span>
+
+            @if (ShowRetryButton && !NetworkStatus.IsOnline == false && !NetworkStatus.IsApiHealthy)
+            {
+                <MudButton Variant="Variant.Text"
+                           Size="Size.Small"
+                           OnClick="OnRetryClicked"
+                           Class="retry-btn">
+                    Retry
+                </MudButton>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public bool ShowRetryButton { get; set; } = true;
+
+    [Parameter]
+    public EventCallback OnRetry { get; set; }
+
+    private bool _isVisible = false;
+
+    protected override void OnInitialized()
+    {
+        NetworkStatus.OnStatusChanged += HandleStatusChanged;
+        UpdateVisibility();
+    }
+
+    private void HandleStatusChanged()
+    {
+        InvokeAsync(() =>
+        {
+            UpdateVisibility();
+            StateHasChanged();
+        });
+    }
+
+    private void UpdateVisibility()
+    {
+        _isVisible = !NetworkStatus.IsOnline || !NetworkStatus.IsApiHealthy;
+    }
+
+    private string GetStatusClass()
+    {
+        if (!NetworkStatus.IsOnline)
+            return "offline";
+        if (!NetworkStatus.IsApiHealthy)
+            return "api-error";
+        return "";
+    }
+
+    private string GetIcon()
+    {
+        if (!NetworkStatus.IsOnline)
+            return Icons.Material.Filled.WifiOff;
+        if (!NetworkStatus.IsApiHealthy)
+            return Icons.Material.Filled.CloudOff;
+        return Icons.Material.Filled.CheckCircle;
+    }
+
+    private string GetMessage()
+    {
+        if (!NetworkStatus.IsOnline)
+            return "You're offline";
+        if (!NetworkStatus.IsApiHealthy)
+            return "Server connection issue";
+        return "Connected";
+    }
+
+    private async Task OnRetryClicked()
+    {
+        await OnRetry.InvokeAsync();
+    }
+
+    public void Dispose()
+    {
+        NetworkStatus.OnStatusChanged -= HandleStatusChanged;
+    }
+}
+
+<style>
+    .network-indicator {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9999;
+        padding: 8px 16px;
+        transform: translateY(-100%);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .network-indicator.visible {
+        transform: translateY(0);
+    }
+
+    .network-indicator.offline {
+        background: linear-gradient(135deg, #424242 0%, #303030 100%);
+    }
+
+    .network-indicator.api-error {
+        background: linear-gradient(135deg, #e65100 0%, #bf360c 100%);
+    }
+
+    .indicator-content {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: white;
+        font-size: 0.875rem;
+    }
+
+    .indicator-icon {
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    @@keyframes pulse {
+        0%, 100% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.6;
+        }
+    }
+
+    .indicator-text {
+        font-weight: 500;
+    }
+
+    .retry-btn {
+        color: white !important;
+        margin-left: 8px;
+        padding: 2px 8px;
+        min-width: auto;
+        font-size: 0.75rem;
+    }
+
+    .retry-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .network-indicator {
+            transition: none;
+        }
+
+        .indicator-icon {
+            animation: none;
+        }
+    }
+</style>

@@ -28,6 +28,9 @@ builder.Services.AddScoped<GameStateService>();
 builder.Services.AddScoped<ApiKeyService>();
 builder.Services.AddScoped<GeminiService>();
 
+// Add network monitoring service
+builder.Services.AddScoped<NetworkStatusService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

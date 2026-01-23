@@ -1,19 +1,42 @@
 @inherits LayoutComponentBase
 @using TrapValueGame.Components.Dialogs
+@using TrapValueGame.Components.Shared
 @inject IDialogService DialogService
 @inject TrapValueGame.Services.ApiKeyService ApiKeyService
 @inject TrapValueGame.Services.GameStateService GameStateService
+@inject TrapValueGame.Services.NetworkStatusService NetworkStatusService
+@implements IAsyncDisposable
 
 <MudThemeProvider Theme="@_theme" IsDarkMode="true" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
+@* Network status indicator *@
+<NetworkStatusIndicator OnRetry="HandleNetworkRetry" />
+
 <MudLayout>
     <MudAppBar Elevation="0" Dense="true" Color="Color.Transparent">
         <MudText Typo="Typo.h6" Class="ml-3">Trap Or Value</MudText>
         <MudSpacer />
-        <MudIconButton Icon="@Icons.Material.Filled.Leaderboard" Color="Color.Inherit" />
+
+        @* Connection status indicator in app bar *@
+        @if (!NetworkStatusService.IsOnline)
+        {
+            <MudTooltip Text="You're offline">
+                <MudIcon Icon="@Icons.Material.Filled.WifiOff" Color="Color.Warning" Class="mr-2" />
+            </MudTooltip>
+        }
+        else if (!NetworkStatusService.IsApiHealthy)
+        {
+            <MudTooltip Text="Server connection issue">
+                <MudIcon Icon="@Icons.Material.Filled.CloudOff" Color="Color.Warning" Class="mr-2" />
+            </MudTooltip>
+        }
+
+        <MudIconButton Icon="@Icons.Material.Filled.Leaderboard"
+                       Color="Color.Inherit"
+                       OnClick="OpenStats" />
         <MudIconButton Icon="@Icons.Material.Filled.Settings"
                        Color="@(ApiKeyService.HasApiKey ? Color.Success : Color.Inherit)"
                        OnClick="OpenSettings" />
@@ -25,6 +48,35 @@
 </MudLayout>
 
 @code {
+    private bool _isInitialized = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_isInitialized)
+        {
+            _isInitialized = true;
+            await NetworkStatusService.InitializeAsync();
+            NetworkStatusService.OnStatusChanged += HandleNetworkStatusChanged;
+            StateHasChanged();
+        }
+    }
+
+    private void HandleNetworkStatusChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleNetworkRetry()
+    {
+        // Reload the current game state
+        await GameStateService.LoadNextSnapshotAsync();
+    }
+
+    private async Task OpenStats()
+    {
+        await DialogService.ShowAsync<StatsDialog>("Your Stats");
+    }
+
     private async Task OpenSettings()
     {
         var result = await DialogService.ShowAsync<ApiKeyDialog>("API Key Settings");
@@ -34,6 +86,12 @@
             GameStateService.RefreshNarrativeState();
             StateHasChanged();
         }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        NetworkStatusService.OnStatusChanged -= HandleNetworkStatusChanged;
+        await NetworkStatusService.DisposeAsync();
     }
 
     private MudTheme _theme = new MudTheme

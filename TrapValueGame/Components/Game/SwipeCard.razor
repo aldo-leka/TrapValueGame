@@ -1,7 +1,7 @@
 @namespace TrapValueGame.Components.Game
 @inject IJSRuntime JS
 
-<div class="swipe-container" @ref="_containerRef" tabindex="0" @onkeydown="HandleKeyDown">
+<div class="swipe-container @(_isExiting ? "exiting" : "")" @ref="_containerRef" tabindex="0" @onkeydown="HandleKeyDown">
     @* Left overlay (TRAP) *@
     <div class="swipe-overlay trap-overlay @GetOverlayClass("trap")">
         <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Size="Size.Large" />
@@ -15,15 +15,16 @@
     </div>
 
     @* Swipeable card *@
-    <div class="swipe-card @(_isDragging ? "dragging" : "released")"
-         style="transform: translateX(@(_dragX)px) rotate(@(GetRotation())deg);"
+    <div class="swipe-card @GetCardClass()"
+         style="@GetCardStyle()"
          @onmousedown="HandleMouseDown"
          @onmouseup="HandleMouseUp"
          @onmousemove="HandleMouseMove"
          @onmouseleave="HandleMouseLeave"
          @ontouchstart="HandleTouchStart"
          @ontouchend="HandleTouchEnd"
-         @ontouchmove="HandleTouchMove">
+         @ontouchmove="HandleTouchMove"
+         @ontouchcancel="HandleTouchCancel">
 
         <MudPaper Class="pa-6 swipe-card-content" Elevation="4">
             <MudStack AlignItems="AlignItems.Center" Spacing="4">
@@ -92,13 +93,23 @@
 
     private ElementReference _containerRef;
     private double _dragX = 0;
+    private double _dragY = 0;
     private double _dragStartX = 0;
+    private double _dragStartY = 0;
+    private double _velocity = 0;
+    private double _lastDragX = 0;
+    private DateTime _lastMoveTime = DateTime.Now;
     private bool _isDragging = false;
     private bool _isDecisionMade = false;
+    private bool _isExiting = false;
+    private bool _isSnappingBack = false;
+    private string _exitDirection = "";
 
     private const double SwipeThreshold = 100;
     private const double PeekThreshold = 30;
-    private const double MaxRotation = 15;
+    private const double MaxRotation = 12;
+    private const double VelocityThreshold = 0.8; // pixels per ms
+    private const double DragResistance = 0.15; // Vertical drag resistance
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -111,16 +122,14 @@
 
     private void HandleMouseDown(MouseEventArgs e)
     {
-        if (!IsEnabled || _isDecisionMade) return;
-        _isDragging = true;
-        _dragStartX = e.ClientX;
+        if (!IsEnabled || _isDecisionMade || _isExiting) return;
+        StartDrag(e.ClientX, e.ClientY);
     }
 
     private void HandleMouseMove(MouseEventArgs e)
     {
         if (!_isDragging || !IsEnabled || _isDecisionMade) return;
-        _dragX = e.ClientX - _dragStartX;
-        StateHasChanged();
+        UpdateDrag(e.ClientX, e.ClientY);
     }
 
     private async Task HandleMouseUp(MouseEventArgs e)
@@ -137,11 +146,10 @@
 
     private void HandleTouchStart(TouchEventArgs e)
     {
-        if (!IsEnabled || _isDecisionMade) return;
+        if (!IsEnabled || _isDecisionMade || _isExiting) return;
         if (e.Touches.Length > 0)
         {
-            _isDragging = true;
-            _dragStartX = e.Touches[0].ClientX;
+            StartDrag(e.Touches[0].ClientX, e.Touches[0].ClientY);
         }
     }
 
@@ -150,8 +158,7 @@
         if (!_isDragging || !IsEnabled || _isDecisionMade) return;
         if (e.Touches.Length > 0)
         {
-            _dragX = e.Touches[0].ClientX - _dragStartX;
-            StateHasChanged();
+            UpdateDrag(e.Touches[0].ClientX, e.Touches[0].ClientY);
         }
     }
 
@@ -161,26 +168,127 @@
         await CheckSwipeComplete();
     }
 
+    private async Task HandleTouchCancel(TouchEventArgs e)
+    {
+        if (!_isDragging) return;
+        await SnapBack();
+    }
+
+    private void StartDrag(double clientX, double clientY)
+    {
+        _isDragging = true;
+        _isSnappingBack = false;
+        _dragStartX = clientX;
+        _dragStartY = clientY;
+        _lastDragX = 0;
+        _lastMoveTime = DateTime.Now;
+        _velocity = 0;
+    }
+
+    private void UpdateDrag(double clientX, double clientY)
+    {
+        var now = DateTime.Now;
+        var deltaTime = (now - _lastMoveTime).TotalMilliseconds;
+
+        var newDragX = clientX - _dragStartX;
+        var newDragY = (clientY - _dragStartY) * DragResistance; // Reduced vertical movement
+
+        // Calculate velocity for swipe detection
+        if (deltaTime > 0)
+        {
+            _velocity = (newDragX - _lastDragX) / deltaTime;
+        }
+
+        _lastDragX = newDragX;
+        _lastMoveTime = now;
+        _dragX = newDragX;
+        _dragY = newDragY;
+
+        // Trigger haptic feedback at thresholds
+        _ = TriggerHapticAtThreshold(newDragX);
+
+        StateHasChanged();
+    }
+
+    private bool _lastWasPeeking = false;
+    private bool _lastWasFull = false;
+
+    private async Task TriggerHapticAtThreshold(double dragX)
+    {
+        var isPeeking = Math.Abs(dragX) >= PeekThreshold && Math.Abs(dragX) < SwipeThreshold;
+        var isFull = Math.Abs(dragX) >= SwipeThreshold;
+
+        // Light haptic when entering peek zone
+        if (isPeeking && !_lastWasPeeking)
+        {
+            await TriggerHaptic("light");
+        }
+        // Medium haptic when entering full zone
+        else if (isFull && !_lastWasFull)
+        {
+            await TriggerHaptic("medium");
+        }
+
+        _lastWasPeeking = isPeeking;
+        _lastWasFull = isFull;
+    }
+
+    private async Task TriggerHaptic(string intensity)
+    {
+        try
+        {
+            var duration = intensity switch
+            {
+                "light" => 10,
+                "medium" => 20,
+                "heavy" => 40,
+                _ => 10
+            };
+            await JS.InvokeVoidAsync("eval", $"navigator.vibrate?.({duration})");
+        }
+        catch
+        {
+            // Haptics not supported, ignore
+        }
+    }
+
     private async Task CheckSwipeComplete()
     {
         _isDragging = false;
 
-        if (Math.Abs(_dragX) >= SwipeThreshold)
+        // Check if swipe threshold met OR velocity is high enough
+        var shouldTrigger = Math.Abs(_dragX) >= SwipeThreshold ||
+                           (Math.Abs(_velocity) >= VelocityThreshold && Math.Abs(_dragX) >= PeekThreshold);
+
+        if (shouldTrigger)
         {
             var choice = _dragX > 0 ? "value" : "trap";
             await TriggerDecision(choice);
         }
         else
         {
-            // Snap back
-            _dragX = 0;
-            StateHasChanged();
+            await SnapBack();
         }
+    }
+
+    private async Task SnapBack()
+    {
+        _isDragging = false;
+        _isSnappingBack = true;
+        _dragX = 0;
+        _dragY = 0;
+        StateHasChanged();
+
+        // Reset snap state after animation
+        await Task.Delay(300);
+        _isSnappingBack = false;
+        _lastWasPeeking = false;
+        _lastWasFull = false;
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
-        if (!IsEnabled || _isDecisionMade) return;
+        if (!IsEnabled || _isDecisionMade || _isExiting) return;
 
         switch (e.Key)
         {
@@ -199,16 +307,43 @@
 
     private async Task TriggerDecision(string choice)
     {
-        if (!IsEnabled || _isDecisionMade) return;
+        if (!IsEnabled || _isDecisionMade || _isExiting) return;
 
         _isDecisionMade = true;
+        _isExiting = true;
+        _exitDirection = choice;
 
-        // Animate card flying off screen
-        _dragX = choice == "value" ? 500 : -500;
+        // Trigger strong haptic on decision
+        await TriggerHaptic("heavy");
+
+        // Animate card flying off screen with momentum
+        var exitX = choice == "value" ? 600 : -600;
+        var exitY = _dragY + (_dragY * 0.5); // Slight vertical continuation
+        _dragX = exitX;
+        _dragY = exitY;
         StateHasChanged();
 
-        await Task.Delay(200);
+        // Wait for exit animation
+        await Task.Delay(350);
         await OnDecision.InvokeAsync(choice);
+    }
+
+    private string GetCardClass()
+    {
+        if (_isExiting) return "exiting";
+        if (_isDragging) return "dragging";
+        if (_isSnappingBack) return "snapping";
+        return "idle";
+    }
+
+    private string GetCardStyle()
+    {
+        var translateX = _dragX;
+        var translateY = _dragY;
+        var rotation = GetRotation();
+        var scale = _isDragging ? 1.02 : 1.0;
+
+        return $"transform: translateX({translateX:F1}px) translateY({translateY:F1}px) rotate({rotation:F2}deg) scale({scale:F2});";
     }
 
     private string GetOverlayClass(string side)
@@ -232,7 +367,10 @@
 
     private double GetRotation()
     {
-        return (_dragX / SwipeThreshold) * MaxRotation;
+        // Non-linear rotation for more natural feel
+        var normalizedDrag = _dragX / SwipeThreshold;
+        var easedRotation = Math.Sign(normalizedDrag) * Math.Pow(Math.Abs(normalizedDrag), 0.8);
+        return easedRotation * MaxRotation;
     }
 }
 
@@ -242,6 +380,11 @@
         width: 100%;
         min-height: 250px;
         outline: none;
+        perspective: 1000px;
+    }
+
+    .swipe-container.exiting {
+        pointer-events: none;
     }
 
     .swipe-overlay {
@@ -254,29 +397,33 @@
         align-items: center;
         justify-content: center;
         opacity: 0;
-        transition: opacity 0.15s ease;
+        transition: opacity 0.15s ease, transform 0.15s ease;
         pointer-events: none;
         z-index: 1;
     }
 
     .trap-overlay {
         left: 0;
-        background: linear-gradient(90deg, rgba(248, 81, 73, 0.3) 0%, transparent 100%);
+        background: linear-gradient(90deg, rgba(248, 81, 73, 0.35) 0%, transparent 100%);
         color: #F85149;
+        transform: translateX(-10px);
     }
 
     .value-overlay {
         right: 0;
-        background: linear-gradient(-90deg, rgba(63, 185, 80, 0.3) 0%, transparent 100%);
+        background: linear-gradient(-90deg, rgba(63, 185, 80, 0.35) 0%, transparent 100%);
         color: #3FB950;
+        transform: translateX(10px);
     }
 
     .swipe-overlay.peeking {
-        opacity: 0.5;
+        opacity: 0.6;
+        transform: translateX(0);
     }
 
     .swipe-overlay.full {
         opacity: 1;
+        transform: translateX(0) scale(1.05);
     }
 
     .swipe-card {
@@ -284,7 +431,12 @@
         z-index: 10;
         cursor: grab;
         user-select: none;
-        touch-action: pan-y;
+        touch-action: none;
+        will-change: transform;
+    }
+
+    .swipe-card.idle {
+        transition: transform 0.1s ease-out;
     }
 
     .swipe-card.dragging {
@@ -292,14 +444,31 @@
         transition: none;
     }
 
-    .swipe-card.released {
-        transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    .swipe-card.snapping {
+        /* Spring physics: overshoot then settle */
+        transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .swipe-card.exiting {
+        /* Fast exit with slight deceleration */
+        transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease-out;
+        opacity: 0;
     }
 
     .swipe-card-content {
         background: var(--mud-palette-surface) !important;
         border: 1px solid var(--mud-palette-lines-default);
         border-radius: 12px;
+        transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .swipe-card.dragging .swipe-card-content {
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        border-color: var(--mud-palette-primary);
+    }
+
+    .swipe-card.snapping .swipe-card-content {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     }
 
     .decision-btn {
@@ -307,7 +476,11 @@
         padding: 16px 32px;
         font-size: 1.1rem;
         font-weight: 600;
-        transition: transform 0.2s, box-shadow 0.2s;
+        transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+    }
+
+    .decision-btn:active:not(:disabled) {
+        transform: scale(0.95);
     }
 
     .trap-btn:hover:not(:disabled) {
@@ -329,6 +502,16 @@
         font-family: monospace;
     }
 
+    /* Button press animations */
+    .button-fallback {
+        transition: opacity 0.2s ease;
+    }
+
+    .swipe-container.exiting .button-fallback {
+        opacity: 0.5;
+        pointer-events: none;
+    }
+
     @@media (max-width: 640px) {
         .swipe-card-content {
             padding: 24px 16px;
@@ -337,6 +520,19 @@
         .decision-btn {
             min-width: 120px;
             padding: 12px 24px;
+        }
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .swipe-card,
+        .swipe-overlay,
+        .decision-btn {
+            transition: none !important;
+        }
+
+        .swipe-card.snapping,
+        .swipe-card.exiting {
+            transition: none !important;
         }
     }
 </style>
