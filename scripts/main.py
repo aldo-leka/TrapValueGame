@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -17,15 +18,24 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# CORS - configure for production domain via ALLOWED_ORIGINS env var
+allowed_origins = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:5000,http://localhost:5001"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5000", "http://localhost:5001"],
+    allow_origins=allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(game_router, prefix="/game", tags=["Game"])
-app.include_router(admin_router, prefix="/admin", tags=["Admin"])
+
+# Only include admin routes if seeding is enabled (disabled in production)
+if os.getenv("DISABLE_SEEDING", "false").lower() != "true":
+    app.include_router(admin_router, prefix="/admin", tags=["Admin"])
 
 
 @app.get("/health")
